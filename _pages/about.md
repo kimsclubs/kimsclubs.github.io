@@ -6,7 +6,7 @@ subtitle: Dr. Kim's group
 
 profile:
   align: right
-  image: sunny.jpeg
+  image: sunny1.jpeg
   image_circular: false # crops the image to make it circular
   address: >
     <p>I'll play my favorite tune. Come and enjoy the music. 🎶🎵</p>
