@@ -27,7 +27,7 @@
       
       "startDate": "2018-04-01",
       "endDate": "present",
-      "summary": "Teaching and doing research at electronic engineering department. "
+      "summary": "Teaching and doing research in electrical engineering. "
       
     },
     {
@@ -36,7 +36,7 @@
       
       "startDate": "2016-10-01",
       "endDate": "2018-03-31",
-      "summary": "Wireless power transdfer and energy harvesting."
+      "summary": "Wireless power transfer and energy harvesting."
       
     }
   ],
@@ -86,11 +86,10 @@
   ],
   "interests": [
     {
-      "interests": "Hi-Fi Stuff",
-      "fluency": "A pair of speakers and some good music"
+      "name": "Hi-Fi Music"
     },
     {
-      "interests": "Sci-Fi Movies",
+      "name": "Sci-Fi Movies",
       "fluency": "Action movies can be entertaining and enjoyable as well!"
     }
   ],
