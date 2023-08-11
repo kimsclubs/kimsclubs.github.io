@@ -2,7 +2,7 @@
 layout: page
 title: K Theyagarajan PhD
 description: Research Professor
-img: assets/img/Theyagarajan.jpeg
+img: assets/img/theyagarajan.png
 importance: 3
 category: current
 
