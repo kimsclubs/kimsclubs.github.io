@@ -9,7 +9,7 @@ profile:
   image: sunny1.jpeg
   image_circular: false # crops the image to make it circular
   address: >
-    <p>I'll play my favorite tune. Come and enjoy the music. 🎶🎵</p>
+    <p>Come right in and enjoy the music. 🎶🎵</p>
 
 news: true  # includes a list of news items
 ---
