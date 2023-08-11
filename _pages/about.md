@@ -3,7 +3,6 @@ layout: about
 title: about
 permalink: /
 
-
 profile:
   align: right
   image: prof_pic.jpg
@@ -30,3 +29,4 @@ MICS 연구실에서는 회로와 시스템을 기반으로 의용생체, 마이
 그냥 뭘 해야할지 모르겠지만 뭔가에 몰두해서 목표를 달성하고 성취감을 느끼고 싶다! 
 우리 연구실에 관심이 있고 정말 열심히 해보고 싶다 라는 생각이 들면 주저 없이 이메일을 보내보세요.
 
+contact email : `youngkim@gachon.ac.kr`
