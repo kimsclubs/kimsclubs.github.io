@@ -4,7 +4,7 @@ permalink: /people/
 title: people
 description: researchers in this group.
 nav: true
-nav_order: 0
+nav_order: 1
 display_categories: [principal investigator, current, alumni]
 horizontal: true
 ---
