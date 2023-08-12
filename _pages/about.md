@@ -14,7 +14,7 @@ profile:
 news: true  # includes a list of news items
 ---
 
-We go by the name MICS /mɪks/ Lab, pronounced as "MIX". Like the name, our lab's focus is a MIX of fields, spanning from `Medical` and `Microwave` to `Innovative Circuits` and `Sensors`. Whichever way you want to name it!
+We go by the name MICS /mɪks/ Lab, pronounced as "MIX". Like how it sounds, our lab's focus is a `MIX` of fields, spanning from `Medical` and `Microwave` to `Innovative Circuits` and `Sensors`. Whichever way you want to name it!
 
 If you're aiming to engage in globally competitive research and are considering pursuing graduate studies, we're here to support you. If you're driven by a strong passion for a specific research area and could use some assistance, don't hesitate to reach out. Alternatively, if you're feeling a bit disoriented and require guidance in shaping your career, feel free to seek us out. Our door is always open! Contact us via email!
 
