@@ -1,7 +1,7 @@
 ---
 layout: page
 permalink: /people/
-title: people
+title: People
 description: researchers in this group.
 nav: true
 nav_order: 1
