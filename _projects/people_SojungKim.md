@@ -2,7 +2,7 @@
 layout: page
 title: Sojung <br> Kim <br> &nbsp;
 description: B.S Student
-img: assets/img/3.jpg
+img: assets/img/SJKim.jpg
 importance: 11
 category: current
 
