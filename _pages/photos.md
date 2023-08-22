@@ -16,7 +16,7 @@ div class="row">
     Aug 2023 Summer Party
 </div>
 
-
+<br>
 <div class="row">
     <div class="col-sm mt-3 mt-md-0">
         {% include figure.html path="assets/img/2022bowling.jpeg" title="2022grad" class="img-fluid rounded z-depth-1" %}
