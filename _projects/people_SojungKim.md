@@ -1,11 +1,11 @@
 ---
 layout: page
 title: Sojung <br> Kim <br> &nbsp;
-description: B.S Student
+description: M.S. Student
 img: assets/img/SJKim.jpg
-importance: 11
+importance: 8
 category: current
 
 ---
 
-Research Area : Wireless Power Transfer
+Research Area : Wireless Power Transfer, RF circuits
