@@ -10,6 +10,21 @@ nav_order: 5
 <br>
 <div class="row">
     <div class="col-sm mt-3 mt-md-0">
+        {% include figure.html path="assets/img/2023_winter_party.jpg" title="2023 Fall picnic" class="img-fluid rounded z-depth-1" %}
+    </div>
+    <div class="col-sm mt-3 mt-md-0">
+        {% include figure.html path="assets/img/2023_winter_party.jpg" title="2023 Fall picnic2" class="img-fluid rounded z-depth-1" %}
+    </div>
+</div>
+
+<div class="caption">
+    2023 Winter Party.
+</div>
+
+
+<br>
+<div class="row">
+    <div class="col-sm mt-3 mt-md-0">
         {% include figure.html path="assets/img/2023Fall_picnic_lunch_with_heart.JPG" title="2023 Fall picnic" class="img-fluid rounded z-depth-1" %}
     </div>
     <div class="col-sm mt-3 mt-md-0">
