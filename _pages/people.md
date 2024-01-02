@@ -61,8 +61,6 @@ Jung-Geun Chi (Current affiliation:  LG Electronics)
 
 JuYong Lee (Current affiliation:  Yonsei University/KETI)
 
-JungHoon Cho (Current affiliation:  UNIST)
+JungHoon Cho (Current affiliation:  Samsung Electronics)
 
-Cheong-Min Lee 
-
-Jin-Woo Jeong (Current affiliation:  Yonsei University)
+Jin-Woo Jeong (Current affiliation:  Hyundai Rotem)
