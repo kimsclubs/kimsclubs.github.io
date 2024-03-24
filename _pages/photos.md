@@ -10,6 +10,34 @@ nav_order: 5
 <br>
 <div class="row">
     <div class="col-sm mt-3 mt-md-0">
+        {% include figure.html path="assets/img/Seoul Marathon 1.JPG" title="Seoul Marathon" class="img-fluid rounded z-depth-1" %}
+    </div>
+    <div class="col-sm mt-3 mt-md-0">
+        {% include figure.html path="assets/img/Seoul Marathon 2.JPG" title="Seoul Marathon" class="img-fluid rounded z-depth-1" %}
+    </div>
+</div>
+
+<div class="caption">
+    2024 Seoul Marathon. Completing 10km in an hour.
+</div>
+
+<br>
+<div class="row">
+    <div class="col-sm mt-3 mt-md-0">
+        {% include figure.html path="assets/img/KIEES_winter_jeju_dong.jpg" title="KIEES_winter_jeju" class="img-fluid rounded z-depth-1" %}
+    </div>
+    <div class="col-sm mt-3 mt-md-0">
+        {% include figure.html path="assets/img/KIEES_winter_jeju_so.jpg" title="KIEES_winter_jeju" class="img-fluid rounded z-depth-1" %}
+    </div>
+</div>
+
+<div class="caption">
+    2024 KIEES winter conference in jeju.
+</div>
+
+<br>
+<div class="row">
+    <div class="col-sm mt-3 mt-md-0">
         {% include figure.html path="assets/img/2023_winter_party.jpg" title="2023 Winter party" class="img-fluid rounded z-depth-1" %}
     </div>
 </div>
