@@ -18,7 +18,21 @@ nav_order: 5
 </div>
 
 <div class="caption">
-    2024 Seoul Marathon. Completing 10km in an hour.
+    Feb 2024 Seoul Marathon. Completing 10km in an hour.
+</div>
+
+<br>
+<div class="row">
+    <div class="col-sm mt-3 mt-md-0">
+        {% include figure.html path="assets/img/2024winter graduation.jpg" title="2024winter graduation" class="img-fluid rounded z-depth-1" %}
+    </div>
+    <div class="col-sm mt-3 mt-md-0">
+        {% include figure.html path="assets/img/2024winter graduation2.JPG" title="2024winter graduation" class="img-fluid rounded z-depth-1" %}
+    </div>
+</div>
+
+<div class="caption">
+    Feb 2024 Graduation.
 </div>
 
 <br>
@@ -32,7 +46,7 @@ nav_order: 5
 </div>
 
 <div class="caption">
-    2024 KIEES winter conference in jeju.
+    Feb 2024 KIEES conference in jeju.
 </div>
 
 <br>
@@ -43,7 +57,7 @@ nav_order: 5
 </div>
 
 <div class="caption">
-    2023 Winter Party.
+    Dec 2023 Winter Party.
 </div>
 
 
@@ -58,7 +72,7 @@ nav_order: 5
 </div>
 
 <div class="caption">
-    2023 Fall Picnic.
+    Nov 2023 Fall Picnic.
 </div>
 
 <div class="row">
