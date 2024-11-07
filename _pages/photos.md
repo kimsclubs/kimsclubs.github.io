@@ -14,6 +14,10 @@ nav_order: 5
     </div>
 </div>
 
+<div class="caption">
+    Aug 2024 Graduation.
+</div>
+
 <br>
 <div class="row">
     <div class="col-sm mt-3 mt-md-0">
