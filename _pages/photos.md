@@ -10,12 +10,36 @@ nav_order: 5
 <br>
 <div class="row">
     <div class="col-sm mt-3 mt-md-0">
+        {% include figure.html path="assets/img/2025Med_Moh.jpg" title="May 2025 Medical&Biological engineering conference in jeju" class="img-fluid rounded z-depth-1" %}
+    </div>
+    <div class="col-sm mt-3 mt-md-0">
+        {% include figure.html path="assets/img/2025Med_Tal.jpg" title="May 2025 Medical&Biological engineering conference in jeju" class="img-fluid rounded z-depth-1" %}
+    </div>
+    <div class="col-sm mt-3 mt-md-0">
+        {% include figure.html path="assets/img/2025Med_KWPark.jpg" title="May 2025 Medical&Biological engineering conference in jeju" class="img-fluid rounded z-depth-1" %}
+    </div>
+    
+</div>
+
+<br>
+<div class="row">
+    <div class="col-sm mt-3 mt-md-0">
         {% include figure.html path="assets/img/2024summer_grad.JPG" title="2024summer graduation" class="img-fluid rounded z-depth-1" %}
     </div>
 </div>
 
 <div class="caption">
     Aug 2024 Graduation.
+</div>
+
+<br>
+<div class="row">
+    <div class="col-sm mt-3 mt-md-0">
+        {% include figure.html path="assets/img/2024EMBC_CHKim.jpg" title="July 2024 EMBC conference in Orlando, FL, USA" class="img-fluid rounded z-depth-1" %}
+    </div>
+    <div class="col-sm mt-3 mt-md-0">
+        {% include figure.html path="assets/img/2024EMBC_YYoo.jpg" title="July 2024 EMBC conference in Orlando, FL, USA" class="img-fluid rounded z-depth-1" %}
+    </div>
 </div>
 
 <br>
