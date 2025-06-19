@@ -10,6 +10,18 @@ nav_order: 5
 <br>
 <div class="row">
     <div class="col-sm mt-3 mt-md-0">
+        {% include figure.html path="assets/img/2025ECTC_SJKim.jpg" title="May 2025 ECTC conference in Dallas, TX, USA" class="img-fluid rounded z-depth-1" %}
+    </div>
+</div>
+
+<div class="caption">
+    May 2025 ECTC conference in Dallas, TX, USA.
+</div>
+
+
+<br>
+<div class="row">
+    <div class="col-sm mt-3 mt-md-0">
         {% include figure.html path="assets/img/2025Med_Moh.jpg" title="May 2025 Medical&Biological engineering conference in jeju" class="img-fluid rounded z-depth-1" %}
     </div>
     <div class="col-sm mt-3 mt-md-0">
@@ -34,6 +46,28 @@ nav_order: 5
 
 <div class="caption">
     Feb 2025 Graduation.
+</div>
+
+<br>
+<div class="row">
+    <div class="col-sm mt-3 mt-md-0">
+        {% include figure.html path="assets/img/2025RF_SJKim.jpg" title="2025 KIEES" class="img-fluid rounded z-depth-1" %}
+    </div>
+</div>
+
+<div class="caption">
+    Feb 2025 KIEES conference in jeju.
+</div>
+
+<br>
+<div class="row">
+    <div class="col-sm mt-3 mt-md-0">
+        {% include figure.html path="assets/img/2025KCS_YJKim_YYoo.jpeg" title="2025 KCS" class="img-fluid rounded z-depth-1" %}
+    </div>
+</div>
+
+<div class="caption">
+    Feb 2025 KCS conference in jeongseon.
 </div>
 
 <br>
