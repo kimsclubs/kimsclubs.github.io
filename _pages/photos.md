@@ -21,6 +21,21 @@ nav_order: 5
     
 </div>
 
+<div class="caption">
+    May 2025 Medical&Biological engineering conference in jeju.
+</div>
+
+<br>
+<div class="row">
+    <div class="col-sm mt-3 mt-md-0">
+        {% include figure.html path="assets/img/2025winter grad.jpg" title="2025winter graduation" class="img-fluid rounded z-depth-1" %}
+    </div>
+</div>
+
+<div class="caption">
+    Feb 2025 Graduation.
+</div>
+
 <br>
 <div class="row">
     <div class="col-sm mt-3 mt-md-0">
@@ -40,6 +55,10 @@ nav_order: 5
     <div class="col-sm mt-3 mt-md-0">
         {% include figure.html path="assets/img/2024EMBC_YYoo.jpg" title="July 2024 EMBC conference in Orlando, FL, USA" class="img-fluid rounded z-depth-1" %}
     </div>
+</div>
+
+<div class="caption">
+    July 2024 EMBC conference in Orlando, FL, USA.
 </div>
 
 <br>
