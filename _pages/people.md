@@ -67,8 +67,8 @@ Jin-Woo Jeong (Current affiliation:  Hyundai Rotem)
 
 Donghyuk Seo (Current affiliation:  NR Lab)
 
+Sebin Kim
+
 Myeongjoo Kim (Current affiliation:  Cellames)
 
 Chaehyun Kim
-
-Sebin Kim (Current affiliation:  )
