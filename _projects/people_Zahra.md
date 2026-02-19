@@ -8,4 +8,4 @@ category: current
 
 ---
 
-Research Area : Microfluidic Channnel
+Research Area : Microfluidics & Electrochemical sensing
