@@ -2,7 +2,7 @@
 layout: page
 title: Bhutta "Mohammad" Akbar Mureed
 description: Ph.D. Student
-img: assets/img/mohammad.png
+img: assets/img/Mohammad.png
 importance: 6
 category: current
 
