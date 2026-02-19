@@ -63,7 +63,7 @@ JuYong Lee (Current affiliation:  Yonsei University/KETI)
 
 JungHoon Cho (Current affiliation:  Samsung Electronics)
 
-Jin-Woo Jeong (Current affiliation:  Hyundai Rotem)
+Jin-Woo Jeong (Current affiliation:  HD Korea Shipbuilding & Offshore Engineering)
 
 Donghyuk Seo (Current affiliation:  NR Lab)
 
