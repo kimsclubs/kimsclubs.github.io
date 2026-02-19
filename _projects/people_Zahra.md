@@ -1,6 +1,6 @@
 ---
 layout: page
-title: "Zahra" Laraib <br> &nbsp;
+title: "Zahra" Laraib
 description: M.S. student
 img: assets/img/Zahra.jpg
 importance: 10
