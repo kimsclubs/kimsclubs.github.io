@@ -7,6 +7,21 @@ nav: true
 nav_order: 5
 ---
 
+
+<br>
+<div class="row">
+    <div class="col-sm mt-3 mt-md-0">
+        {% include figure.html path="assets/img/26W_grad1.jpeg" title="2026 winter graduation" class="img-fluid rounded z-depth-1" %}
+    </div>
+    <div class="col-sm mt-3 mt-md-0">
+        {% include figure.html path="assets/img/26W_grad2.jpg" title="2026 winter graduation" class="img-fluid rounded z-depth-1" %}
+    </div>    
+</div>
+<div class="caption">
+    2026 winter graduation.
+</div>
+
+
 <br>
 <div class="row">
     <div class="col-sm mt-3 mt-md-0">
@@ -17,7 +32,6 @@ nav_order: 5
 <div class="caption">
     May 2025 ECTC conference in Dallas, TX, USA.
 </div>
-
 
 <br>
 <div class="row">
