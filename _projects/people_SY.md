@@ -3,7 +3,7 @@ layout: page
 title: Seokyoung <br> Hwang <br> &nbsp;
 description: M.S. Student
 img: assets/img/SYHwang.png
-importance: 11
+importance: 10
 category: current
 
 ---
