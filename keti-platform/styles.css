@@ -446,6 +446,7 @@ input[type="file"] {
 
 .flash-recovery-row {
   display: flex;
+  gap: 7px;
   justify-content: flex-end;
   margin-top: 7px;
 }
@@ -1020,6 +1021,10 @@ th:first-child {
     grid-template-columns: 1fr;
   }
 
+  .adc-line-tools {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .topbar {
     align-items: flex-start;
     flex-direction: column;
@@ -1048,6 +1053,14 @@ th:first-child {
   }
 
   .field-row {
+    grid-template-columns: 1fr;
+  }
+
+  .adc-line-tools {
+    grid-template-columns: 1fr;
+  }
+
+  .adc-column-list {
     grid-template-columns: 1fr;
   }
 

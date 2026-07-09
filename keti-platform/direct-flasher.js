@@ -7,10 +7,34 @@
   const MAX_SKETCH_SIZE = 983040;
   const BOOTLOADER_BAUD = 921600;
   const WRITE_TIMEOUT_MS = 5000;
-  const WRITE_CHUNK_SIZE = 128;
-  const WRITE_CHUNK_DELAY_MS = 2;
-  const PAGE_WRITE_ATTEMPTS = 2;
-  const ERASE_SETTLE_MS = 1200;
+  const FLASH_PROFILES = {
+    standard: {
+      label: "standard",
+      writeTimeoutMs: WRITE_TIMEOUT_MS,
+      writeChunkSize: 128,
+      writeChunkDelayMs: 2,
+      memoryCommandDelayMs: 5,
+      memorySettleMs: 10,
+      pageWriteAttempts: 2,
+      pageRetryDelayMs: 120,
+      pageSettleMs: 0,
+      eraseSettleMs: 1200,
+      resetSettleMs: 250
+    },
+    compatibility: {
+      label: "compatibility",
+      writeTimeoutMs: 8000,
+      writeChunkSize: 64,
+      writeChunkDelayMs: 8,
+      memoryCommandDelayMs: 12,
+      memorySettleMs: 25,
+      pageWriteAttempts: 3,
+      pageRetryDelayMs: 500,
+      pageSettleMs: 80,
+      eraseSettleMs: 2500,
+      resetSettleMs: 500
+    }
+  };
   const ARDUINO_USB_FILTERS = [
     { usbVendorId: 0x2341 },
     { usbVendorId: 0x2a03 }
@@ -51,17 +75,33 @@
     });
   }
 
+  function resolveFlashProfile(profileOrOptions = "standard") {
+    if (typeof profileOrOptions === "string") {
+      return FLASH_PROFILES[profileOrOptions] || FLASH_PROFILES.standard;
+    }
+    const base = FLASH_PROFILES[profileOrOptions?.profile] || FLASH_PROFILES.standard;
+    return {
+      ...base,
+      ...Object.fromEntries(
+        Object.entries(profileOrOptions || {}).filter(([key]) => key !== "profile")
+      )
+    };
+  }
+
   class SerialTransport {
-    constructor(port, baudRate) {
+    constructor(port, baudRate, profile) {
       this.port = port;
       this.baudRate = baudRate;
+      this.profile = profile;
       this.reader = null;
       this.writer = null;
       this.rx = new Uint8Array(0);
       this.waiters = [];
       this.closed = false;
       this.readPumpTask = null;
-      this.writeTimeoutMs = WRITE_TIMEOUT_MS;
+      this.writeTimeoutMs = profile.writeTimeoutMs;
+      this.writeChunkSize = profile.writeChunkSize;
+      this.writeChunkDelayMs = profile.writeChunkDelayMs;
       this.stalled = false;
     }
 
@@ -181,8 +221,8 @@
     }
 
     async writeBytes(bytes) {
-      for (let offset = 0; offset < bytes.length; offset += WRITE_CHUNK_SIZE) {
-        const chunk = bytes.slice(offset, Math.min(offset + WRITE_CHUNK_SIZE, bytes.length));
+      for (let offset = 0; offset < bytes.length; offset += this.writeChunkSize) {
+        const chunk = bytes.slice(offset, Math.min(offset + this.writeChunkSize, bytes.length));
         try {
           await withTimeout(
             this.writer.ready,
@@ -201,8 +241,8 @@
           }
           throw error;
         }
-        if (WRITE_CHUNK_DELAY_MS > 0 && offset + chunk.length < bytes.length) {
-          await sleep(WRITE_CHUNK_DELAY_MS);
+        if (this.writeChunkDelayMs > 0 && offset + chunk.length < bytes.length) {
+          await sleep(this.writeChunkDelayMs);
         }
       }
     }
@@ -259,6 +299,7 @@
     constructor(options = {}) {
       this.transport = null;
       this.baudRate = options.baudRate || BOOTLOADER_BAUD;
+      this.profile = resolveFlashProfile(options.profile || "standard");
       this.onLog = options.onLog || (() => {});
       this.onProgress = options.onProgress || (() => {});
       this.bootloaderVerified = false;
@@ -279,7 +320,7 @@
     async openBootloaderTransport(port, message = "Opening bootloader") {
       this.bootloaderVerified = false;
       this.bootloaderTarget = null;
-      this.transport = new SerialTransport(port, this.baudRate);
+      this.transport = new SerialTransport(port, this.baudRate, this.profile);
       this.progress(1, message);
       await this.transport.open();
     }
@@ -346,6 +387,7 @@
       try {
         const target = await this.verifyBootloaderTarget();
         this.log(`verified=${target.chip}`);
+        this.log(`profile=${this.profile.label},chunk=${this.profile.writeChunkSize},delay=${this.profile.writeChunkDelayMs}`);
         this.progress(8, "Preparing erase");
         await this.prepareVectorTable(firmwareBytes);
         await this.chipErase(0);
@@ -362,6 +404,7 @@
       try {
         const target = await this.verifyBootloaderTarget();
         this.log(`verified=${target.chip}`);
+        this.log(`profile=${this.profile.label},chunk=${this.profile.writeChunkSize},delay=${this.profile.writeChunkDelayMs}`);
         this.progress(8, "Preparing flash");
         await this.prepareVectorTable(firmwareBytes);
         if (skipErase) {
@@ -369,12 +412,26 @@
         } else {
           await this.chipErase(0);
           this.progress(11, "Erase settle");
-          await sleep(ERASE_SETTLE_MS);
+          await sleep(this.profile.eraseSettleMs);
         }
         await this.writeApplication(firmwareBytes);
         this.progress(98, "Resetting board");
         await this.reset();
         this.progress(100, "Flash complete");
+      } finally {
+        await this.close();
+      }
+    }
+
+    async resetBootloader(port) {
+      await this.openBootloaderTransport(port, "Opening bootloader");
+
+      try {
+        const target = await this.verifyBootloaderTarget();
+        this.log(`verified=${target.chip}`);
+        this.progress(90, "Exiting bootloader");
+        await this.reset();
+        this.progress(100, "Reset sent");
       } finally {
         await this.close();
       }
@@ -446,12 +503,15 @@
       const donePercent = 12 + Math.round(((page + 1) / pageCount) * 84);
       let lastError = null;
 
-      for (let attempt = 1; attempt <= PAGE_WRITE_ATTEMPTS; attempt++) {
+      for (let attempt = 1; attempt <= this.profile.pageWriteAttempts; attempt++) {
         try {
-          const retryText = attempt > 1 ? ` retry ${attempt}/${PAGE_WRITE_ATTEMPTS}` : "";
+          const retryText = attempt > 1 ? ` retry ${attempt}/${this.profile.pageWriteAttempts}` : "";
           this.progress(startPercent, `Writing page ${page + 1}/${pageCount}${retryText}`);
           await this.writeMemory(PAGE_BUFFER_ADDR, pageBuffer);
           await this.copyBufferToFlash(PAGE_BUFFER_ADDR, offset, PAGE_SIZE);
+          if (this.profile.pageSettleMs > 0 && page + 1 < pageCount) {
+            await sleep(this.profile.pageSettleMs);
+          }
           this.progress(donePercent, `Wrote page ${page + 1}/${pageCount}`);
           return;
         } catch (error) {
@@ -465,8 +525,8 @@
             stalledError.cause = error;
             throw stalledError;
           }
-          if (attempt < PAGE_WRITE_ATTEMPTS) {
-            await sleep(120);
+          if (attempt < this.profile.pageWriteAttempts) {
+            await sleep(this.profile.pageRetryDelayMs);
           }
         }
       }
@@ -476,9 +536,9 @@
 
     async writeMemory(address, bytes) {
       await this.transport.writeAscii(`S${hex8(address)},${hex8(bytes.length)}#`);
-      await sleep(5);
+      await sleep(this.profile.memoryCommandDelayMs);
       await this.transport.writeBytes(bytes);
-      await sleep(10);
+      await sleep(this.profile.memorySettleMs);
     }
 
     async writeWord(address, value) {
@@ -503,7 +563,7 @@
 
     async reset() {
       await this.transport.writeAscii("K#");
-      await sleep(250);
+      await sleep(this.profile.resetSettleMs);
     }
   }
 
@@ -543,6 +603,7 @@
   const api = {
     ARDUINO_USB_FILTERS,
     BOOTLOADER_BAUD,
+    FLASH_PROFILES,
     MAX_SKETCH_SIZE,
     DirectSamBaFlasher,
     forceSerialReset,

@@ -87,12 +87,21 @@
             </select>
           </label>
 
+          <label class="field">
+            <span>Flash Mode</span>
+            <select id="flashProfileSelect">
+              <option value="compatibility" selected>Compatibility - slow/reliable</option>
+              <option value="standard">Standard - faster</option>
+            </select>
+          </label>
+
           <div class="flash-main-action">
             <button id="flashButton" class="primary-button" type="button">Flash Firmware</button>
           </div>
           <progress id="flashProgress" class="flash-progress" max="100" value="0"></progress>
           <div class="flash-recovery-row">
             <button id="bootloaderButton" class="recovery-button" type="button">Recovery Bootloader</button>
+            <button id="exitBootloaderButton" class="recovery-button" type="button">Exit Bootloader</button>
           </div>
 
           <div class="divider"></div>
@@ -172,6 +181,7 @@
                 <button class="view-tab active" type="button" data-view="adc">ADC</button>
                 <button class="view-tab" type="button" data-view="imu1d">IMU 1D</button>
                 <button class="view-tab" type="button" data-view="imu2d">IMU 2D</button>
+                <button class="view-tab" type="button" data-view="gyro3d">Gyro 3D</button>
                 <button class="view-tab" type="button" data-view="classification">Class</button>
                 <button class="view-tab" type="button" data-view="dataset">Dataset</button>
                 <button class="view-tab" type="button" data-view="model">Model</button>
@@ -188,6 +198,7 @@
                     <option value="PLOTTER">raw:/filtered:</option>
                     <option value="BLE_DATA">BLE_DATA</option>
                     <option value="PPG">PPG mirror</option>
+                    <option value="CUSTOM">Custom columns</option>
                   </select>
                 </label>
                 <label>
@@ -198,6 +209,7 @@
                     <option value="FILTERED">Filtered only</option>
                     <option value="MILLIVOLTS">Voltage mV</option>
                     <option value="DELTA">Filtered - Raw</option>
+                    <option value="CUSTOM">Custom columns</option>
                   </select>
                 </label>
                 <span id="adcFormatState" class="adc-format-state">All ADC</span>
