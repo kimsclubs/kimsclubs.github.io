@@ -1,4 +1,5494 @@
-function resizeCanvasToDisplaySize(){const e=el.signalCanvas.getBoundingClientRect(),t=window.devicePixelRatio||1,a=Math.max(280,Math.round(e.width)),n=Math.max(280,Math.round(e.height)),i=Math.round(a*t),s=Math.round(n*t);return el.signalCanvas.width===i&&el.signalCanvas.height===s||(el.signalCanvas.width=i,el.signalCanvas.height=s),ctx.setTransform(t,0,0,t,0,0),{width:a,height:n}}function resizeAuxCanvasToDisplaySize(e,t=180){const a=e.getBoundingClientRect(),n=window.devicePixelRatio||1,i=Math.max(280,Math.round(a.width)),s=Math.max(t,Math.round(a.height)),o=Math.round(i*n),r=Math.round(s*n);e.width===o&&e.height===r||(e.width=o,e.height=r);const l=e.getContext("2d");return l.setTransform(n,0,0,n,0,0),{ctx:l,width:i,height:s}}function setStatus(e,t,a="muted"){e.textContent=t,e.className=`status-pill ${a}`.trim()}function logLine(e,t="rx"){const a="tx"===t?">>":"<<",n=`${(new Date).toLocaleTimeString()} ${a} ${e}`;el.logOutput.textContent=`${n}\n${el.logOutput.textContent}`.slice(0,12e3)}function setUiEnabled(){const e=state.connected,t=state.streaming;el.connectButton.disabled=e,el.disconnectButton.disabled=!e,el.startButton.disabled=!e||t,el.stopButton.disabled=!e||!t,el.applyAcquisitionButton.disabled=!e,el.applyFilterButton.disabled=!e,el.pingButton.disabled=!e,el.recordButton.disabled=!e,el.classStartButton.disabled=!e||state.classification.active,el.classStopButton.disabled=!e||!state.classification.active,el.exportButton.disabled=0===state.records.length,el.datasetCaptureOneButton.disabled=state.imuSamples.length<getDatasetWindowSize(),el.datasetExportJsonButton.disabled=0===state.dataset.examples.length,el.datasetExportCsvButton.disabled=0===state.dataset.examples.length,el.trainModelButton.disabled=state.dataset.examples.length<2||labelCounts().length<2,el.exportModelJsonButton.disabled=!state.model.trained,el.exportCArrayButton.disabled=!state.model.trained,el.ppgAnalyzeButton&&(el.ppgAnalyzeButton.disabled=state.ppg.loading||0===state.ppg.samples.length),el.ppgLoadSampleButton&&(el.ppgLoadSampleButton.disabled=state.ppg.loading),el.ppgFileInput&&(el.ppgFileInput.disabled=state.ppg.loading),el.bootloaderButton.disabled=!("serial"in navigator)||state.flash.directBusy,el.flashButton.disabled=!("serial"in navigator)||state.flash.directBusy,el.recordButton.textContent=state.recording?"Stop Rec":"Record",el.datasetCaptureButton.textContent=state.dataset.captureActive?"Stop Capture":"Start Capture",el.flashButton.textContent=state.flash.directBusy?"Flashing...":"Flash Firmware",el.startButton.textContent="classification"===state.activeView?"Start + Class":"Start",el.stopButton.textContent="classification"===state.activeView?"Stop + Class":"Stop",setStatus(el.portStatus,e?"Connected":"Disconnected",e?"":"muted"),setStatus(el.streamStatus,t?"Streaming":"Idle",t?"warning":"muted")}function normalizeNumber(e,t,a,n){const i=Number(e);return Number.isFinite(i)?Math.min(n,Math.max(a,i)):t}function finiteOrNull(e){const t=Number(e);return Number.isFinite(t)?t:null}function formatNumber(e,t=1){return Number.isFinite(e)?e.toFixed(t):"--"}function formatAdcMetric(e,t=1,a=""){if(!Number.isFinite(e))return"--";const n=a?` ${a}`:"";return`${e.toFixed(t)}${n}`}function rawToMillivolts(e){if(!Number.isFinite(e))return NaN;return e/Math.max(1,(1<<state.settings.resolution)-1)*3300}function nextAdcSyntheticSeq(){const e=state.adcSyntheticSeq;return state.adcSyntheticSeq+=1,e}function formatSeconds(e){return e>=1?e.toFixed(2):e.toFixed(3)}function adcWindowSamplesFromSeconds(e){const t=Math.max(1,normalizeNumber(state.settings.rateHz,100,1,1e3));return Math.max(1,Math.min(32,Math.round(normalizeNumber(e,state.settings.windowSec,.001,32)*t)))}function adcWindowSecondsFromSamples(e){const t=Math.max(1,normalizeNumber(state.settings.rateHz,100,1,1e3));return normalizeNumber(e,8,1,32)/t}function updateAdcWindowInputFromSamples(e){const t=Math.round(normalizeNumber(e,8,1,32));state.settings.window=t,state.settings.windowSec=adcWindowSecondsFromSamples(t),el.windowInput.value=formatSeconds(state.settings.windowSec),updateFilterStateText()}function updateFilterStateText(){el.filterState.textContent=`${state.settings.filter} ${formatSeconds(state.settings.windowSec)}s`,renderDspPanel()}function dspSampleRateHz(){return normalizeNumber(el.rateInput?.value??state.settings.rateHz,state.settings.rateHz||100,1,1e3)}function dspMaxCutoffHz(e=dspSampleRateHz()){return Math.max(.02,.45*e)}function lowPassCoefficientAtRate(e,t){const a=Math.max(.001,e),n=1/Math.max(1,t);return n/(1/(2*Math.PI*a)+n)}function highPassCoefficientAtRate(e,t){const a=Math.max(.001,e),n=1/Math.max(1,t),i=1/(2*Math.PI*a);return i/(i+n)}function coeffText(e){return Number.isFinite(e)?e.toPrecision(6):"--"}function syncDspSettingsFromControls({writeBack:e=!1}={}){const t=dspSampleRateHz(),a=dspMaxCutoffHz(t),n=normalizeNumber(el.iirHighInput.value,state.settings.iirHighHz,.02,a),i=Math.min(normalizeNumber(el.iirLowInput.value,state.settings.iirLowHz,.01,a),Math.max(.01,n-.01)),s=Math.round(normalizeNumber(el.iirOrderInput.value,state.settings.iirOrder,1,4));return state.settings.filter=el.filterSelect.value,state.settings.dspProtocol=el.dspProtocolSelect.value||"AUTO",state.settings.rateHz=t,state.settings.alpha=normalizeNumber(el.alphaInput.value,state.settings.alpha,.001,1),state.settings.windowSec=normalizeNumber(el.windowInput.value,state.settings.windowSec,.001,32),state.settings.window=adcWindowSamplesFromSeconds(state.settings.windowSec),state.settings.windowSec=adcWindowSecondsFromSamples(state.settings.window),state.settings.iirOrder=s,state.settings.iirLowHz=i,state.settings.iirHighHz=n,e&&(el.rateInput.value=t.toFixed(Math.abs(t-Math.round(t))<.01?0:1),el.alphaInput.value=String(state.settings.alpha),el.alphaOutput.textContent=state.settings.alpha.toFixed(3),el.windowInput.value=formatSeconds(state.settings.windowSec),el.iirOrderInput.value=String(s),el.iirLowInput.value=i.toFixed(3).replace(/\.?0+$/,""),el.iirHighInput.value=n.toFixed(3).replace(/\.?0+$/,"")),{mode:state.settings.filter,protocol:state.settings.dspProtocol,sampleRateHz:t,nyquistHz:t/2,maxCutoff:a,order:s,lowHz:i,highHz:n,emaAlpha:state.settings.alpha,maWindow:state.settings.window}}function lpfMagnitudeAt(e,t,a){const n=lowPassCoefficientAtRate(t,a),i=1-n,s=2*Math.PI*e/a,o=1-i*Math.cos(s),r=i*Math.sin(s);return n/Math.max(1e-9,Math.sqrt(o*o+r*r))}function hpfMagnitudeAt(e,t,a){const n=highPassCoefficientAtRate(t,a),i=2*Math.PI*e/a,s=n*(1-Math.cos(i)),o=n*Math.sin(i),r=1-n*Math.cos(i),l=n*Math.sin(i);return Math.sqrt(s*s+o*o)/Math.max(1e-9,Math.sqrt(r*r+l*l))}function maMagnitudeAt(e,t,a){const n=2*Math.PI*e/t,i=Math.sin(n/2);return Math.abs(i)<1e-9?1:Math.abs(Math.sin(a*n/2)/(a*i))}function dspMagnitudeAt(e,t){if("IIR_LPF"===t.mode)return Math.pow(lpfMagnitudeAt(e,t.highHz,t.sampleRateHz),t.order);if("IIR_HPF"===t.mode)return Math.pow(hpfMagnitudeAt(e,t.lowHz,t.sampleRateHz),t.order);if("IIR_BPF"===t.mode)return Math.pow(hpfMagnitudeAt(e,t.lowHz,t.sampleRateHz),t.order)*Math.pow(lpfMagnitudeAt(e,t.highHz,t.sampleRateHz),t.order);if("EMA"===t.mode){const a=t.emaAlpha,n=1-a,i=2*Math.PI*e/t.sampleRateHz,s=1-n*Math.cos(i),o=n*Math.sin(i);return a/Math.max(1e-9,Math.sqrt(s*s+o*o))}return"MA"===t.mode?maMagnitudeAt(e,t.sampleRateHz,t.maWindow):1}function describeDspTransfer(e){lowPassCoefficientAtRate(e.lowHz,e.sampleRateHz);const t=lowPassCoefficientAtRate(e.highHz,e.sampleRateHz),a=highPassCoefficientAtRate(e.lowHz,e.sampleRateHz),n=1-e.emaAlpha,i=1-t;return"IIR_LPF"===e.mode?{modeLabel:`IIR LPF / fs=${e.sampleRateHz.toFixed(1)} Hz / N=${e.order}`,transfer:`H_LPF(z) = ${coeffText(t)} / (1 - ${coeffText(i)} z^-1)\nH_total(z) = H_LPF(z)^${e.order}`,equation:`y[n] = ${coeffText(i)} y[n-1] + ${coeffText(t)} x[n]`,coefficients:[["LPF cutoff",`${e.highHz.toFixed(3)} Hz`],["alpha",coeffText(t)],["b0",coeffText(t)],["a1",coeffText(i)]]}:"IIR_HPF"===e.mode?{modeLabel:`IIR HPF / fs=${e.sampleRateHz.toFixed(1)} Hz / N=${e.order}`,transfer:`H_HPF(z) = ${coeffText(a)}(1 - z^-1) / (1 - ${coeffText(a)} z^-1)\nH_total(z) = H_HPF(z)^${e.order}`,equation:`y[n] = ${coeffText(a)} y[n-1] + ${coeffText(a)} x[n] - ${coeffText(a)} x[n-1]`,coefficients:[["HPF cutoff",`${e.lowHz.toFixed(3)} Hz`],["beta",coeffText(a)],["b0, b1",`${coeffText(a)}, ${coeffText(-a)}`],["a1",coeffText(a)]]}:"IIR_BPF"===e.mode?{modeLabel:`IIR BPF / fs=${e.sampleRateHz.toFixed(1)} Hz / N=${e.order}`,transfer:`H_BPF(z) = H_HPF(z, ${e.lowHz.toFixed(3)} Hz)^${e.order} * H_LPF(z, ${e.highHz.toFixed(3)} Hz)^${e.order}`,equation:`HPF: y[n] = ${coeffText(a)} y[n-1] + ${coeffText(a)} x[n] - ${coeffText(a)} x[n-1]\nLPF: y[n] = ${coeffText(i)} y[n-1] + ${coeffText(t)} x[n]`,coefficients:[["HPF beta",coeffText(a)],["LPF alpha",coeffText(t)],["Low / High",`${e.lowHz.toFixed(3)} / ${e.highHz.toFixed(3)} Hz`],["Cascade",`HPF^${e.order} -> LPF^${e.order}`]]}:"EMA"===e.mode?{modeLabel:`EMA / fs=${e.sampleRateHz.toFixed(1)} Hz`,transfer:`H_EMA(z) = ${coeffText(e.emaAlpha)} / (1 - ${coeffText(n)} z^-1)`,equation:`y[n] = ${coeffText(n)} y[n-1] + ${coeffText(e.emaAlpha)} x[n]`,coefficients:[["alpha",coeffText(e.emaAlpha)],["b0",coeffText(e.emaAlpha)],["a1",coeffText(n)],["Type","1st-order IIR"]]}:"MA"===e.mode?{modeLabel:`Moving average / fs=${e.sampleRateHz.toFixed(1)} Hz`,transfer:`H_MA(z) = (1/${e.maWindow}) * (1 - z^-${e.maWindow}) / (1 - z^-1)`,equation:`y[n] = average(x[n], ... x[n-${e.maWindow-1}])`,coefficients:[["Window",`${e.maWindow} samples`],["Window time",`${formatSeconds(e.maWindow/e.sampleRateHz)} s`],["b[k]",`1/${e.maWindow}`],["Type","FIR"]]}:{modeLabel:`RAW / fs=${e.sampleRateHz.toFixed(1)} Hz`,transfer:"H(z) = 1",equation:"y[n] = x[n]",coefficients:[["Gain","1"],["Delay","0"],["Type","Bypass"],["Cutoff","--"]]}}function renderDspCoefficientGrid(e){el.dspCoefficientGrid&&el.dspCoefficientGrid.replaceChildren(...e.map(([e,t])=>{const a=document.createElement("div"),n=document.createElement("span"),i=document.createElement("strong");return n.textContent=e,i.textContent=t,a.append(n,i),a}))}function drawDspResponsePlot(e){if(!el.iirResponseCanvas)return;const{ctx:t,width:a,height:n}=resizeAuxCanvasToDisplaySize(el.iirResponseCanvas,190),i={left:42,right:14,top:18,bottom:30},s=a-i.left-i.right,o=n-i.top-i.bottom,r=-60,l=6,c=e.sampleRateHz/2;t.clearRect(0,0,a,n),t.fillStyle="#ffffff",t.fillRect(0,0,a,n),drawGridOn(t,a,n,i,s,o),t.strokeStyle="#008c8c",t.lineWidth=2,t.beginPath();const d=Math.max(96,Math.min(320,Math.round(s)));for(let a=0;a<d;a++){const n=c*a/Math.max(1,d-1),u=Math.max(1e-6,dspMagnitudeAt(n,e)),p=Math.max(r,Math.min(l,20*Math.log10(u))),m=i.left+s*a/Math.max(1,d-1),g=i.top+o-(p-r)/(l-r)*o;0===a?t.moveTo(m,g):t.lineTo(m,g)}t.stroke();const u=[];"IIR_HPF"!==e.mode&&"IIR_BPF"!==e.mode||u.push({hz:e.lowHz,label:"low",color:"#d28a00"}),"IIR_LPF"!==e.mode&&"IIR_BPF"!==e.mode||u.push({hz:e.highHz,label:"high",color:"#2767c9"});for(const e of u){const n=i.left+Math.min(e.hz,c)/c*s;t.strokeStyle=e.color,t.setLineDash([4,4]),t.beginPath(),t.moveTo(n,i.top),t.lineTo(n,i.top+o),t.stroke(),t.setLineDash([]),t.fillStyle=e.color,t.font="11px Segoe UI, Arial, sans-serif",t.fillText(e.label,Math.min(n+4,a-44),i.top+13)}t.fillStyle="#637083",t.font="11px Segoe UI, Arial, sans-serif",t.fillText(`${l} dB`,7,i.top+4),t.fillText(`${r} dB`,4,i.top+o),t.fillText("0 Hz",i.left,n-8),t.fillText(`${c.toFixed(1)} Hz`,a-i.right-58,n-8)}function renderDspPanel({writeBack:e=!1}={}){if(!el.dspTransferFunction)return;const t=syncDspSettingsFromControls({writeBack:e}),a=describeDspTransfer(t);el.dspEquationMode.textContent=a.modeLabel,el.dspTransferFunction.textContent=a.transfer,el.dspSectionEquation.textContent=a.equation,el.dspNyquistState.textContent=`Nyquist: ${t.nyquistHz.toFixed(1)} Hz / max cutoff: ${t.maxCutoff.toFixed(1)} Hz`,renderDspCoefficientGrid(a.coefficients),drawDspResponsePlot(t)}function resolveDspProtocol(){const e=el.dspProtocolSelect?.value||state.settings.dspProtocol||"AUTO";if("AUTO"!==e)return e;const t=state.latestSample?.format;return"FILT"===t||"FILT"===state.settings.adcFormat?"DAY2_IIR":state.settings.dspProtocolHint?state.settings.dspProtocolHint:"STAGE1"}function day2IirModeName(e){return"IIR_LPF"===e?"LPF":"IIR_HPF"===e?"HPF":"IIR_BPF"===e?"BPF":"RAW"}function syncAdcPlotSettings(){state.settings.adcFormat=el.adcFormatSelect?.value||"ALL",state.settings.adcPlotMode=el.adcPlotModeSelect?.value||"RAW_FILTERED",updateAdcFormatState()}function getVisibleAdcSamples(){const e=state.settings.adcFormat||"ALL";return"ALL"===e?state.samples:state.samples.filter(t=>t.format===e)}function updateAdcFormatState(){if(!el.adcFormatState)return;const e=state.settings.adcFormat||"ALL",t=getVisibleAdcSamples().length,a=state.samples.length,n="ALL"===e?`${a}`:`${t} / ${a}`,i=ADC_FORMAT_LABELS[e]||e;el.adcFormatState.textContent=`${i} - ${n}`}function getAdcPlotValue(e,t){return"delta"===t?Number.isFinite(e.filtered)&&Number.isFinite(e.raw)?e.filtered-e.raw:NaN:Number(e[t])}function getAdcPlotSeries(){const e=state.settings.adcPlotMode||"RAW_FILTERED";return"RAW"===e?[{key:"raw",...ADC_PLOT_SERIES.raw}]:"FILTERED"===e?[{key:"filtered",...ADC_PLOT_SERIES.filtered}]:"MILLIVOLTS"===e?[{key:"millivolts",...ADC_PLOT_SERIES.millivolts}]:"DELTA"===e?[{key:"delta",...ADC_PLOT_SERIES.delta}]:[...el.showRawToggle.checked?[{key:"raw",...ADC_PLOT_SERIES.raw}]:[],...el.showFilteredToggle.checked?[{key:"filtered",...ADC_PLOT_SERIES.filtered}]:[]]}function createPreprocessState(){return{ema:Object.fromEntries(IMU_ACCEL_AXES.map(e=>[e,null])),maWindow:[],iir:Object.fromEntries(IMU_ACCEL_AXES.map(e=>[e,{lpf:[],lpfInit:[],hpfPrevIn:[],hpfPrevOut:[],hpfInit:[]}])),filteredWindow:[]}}function resetPreprocessState(){state.preprocess=createPreprocessState()}function getInputWindowSize(){return Math.round(normalizeNumber(state.settings.inputWindowSamples,125,16,MAX_IMU_POINTS))}function getInputSampleRateHz(){return normalizeNumber(state.settings.rateHz,62.5,1,1e3)}function isInputPreprocessActive(){return"NONE"!==state.settings.inputFilter||"NONE"!==state.settings.normalizeMode}function getInputUnits(){return"NONE"===state.settings.normalizeMode?"g":"norm"}function makeAxisObject(e,t=""){return{ax:e[`${t}ax`]??e.ax,ay:e[`${t}ay`]??e.ay,az:e[`${t}az`]??e.az}}function lowPassCoefficient(e){const t=Math.max(.001,e),a=1/getInputSampleRateHz();return a/(1/(2*Math.PI*t)+a)}function highPassCoefficient(e){const t=Math.max(.001,e),a=1/getInputSampleRateHz(),n=1/(2*Math.PI*t);return n/(n+a)}function applyAxisLowPass(e,t,a,n){const i=state.preprocess.iir[e],s=lowPassCoefficient(a);let o=t;for(let e=0;e<n;e++)i.lpfInit[e]?i.lpf[e]+=s*(o-i.lpf[e]):(i.lpf[e]=o,i.lpfInit[e]=!0),o=i.lpf[e];return o}function applyAxisHighPass(e,t,a,n){const i=state.preprocess.iir[e],s=highPassCoefficient(a);let o=t;for(let e=0;e<n;e++)if(i.hpfInit[e]){const t=s*(i.hpfPrevOut[e]+o-i.hpfPrevIn[e]);i.hpfPrevIn[e]=o,i.hpfPrevOut[e]=t,o=t}else i.hpfPrevIn[e]=o,i.hpfPrevOut[e]=0,i.hpfInit[e]=!0,o=0;return o}function filterImuSample(e){const t=state.settings.inputFilter,a=Math.round(normalizeNumber(state.settings.inputIirOrder,2,1,4)),n=Math.max(.01,.45*getInputSampleRateHz()),i=normalizeNumber(state.settings.inputIirHighHz,8,.002,n),s=Math.min(normalizeNumber(state.settings.inputIirLowHz,.5,.001,n),Math.max(.001,i-.001));if("MA"===t){state.preprocess.maWindow.push(makeAxisObject(e));const t=Math.round(normalizeNumber(state.settings.inputMaWindow,5,1,128));for(;state.preprocess.maWindow.length>t;)state.preprocess.maWindow.shift();return Object.fromEntries(IMU_ACCEL_AXES.map(e=>{const t=state.preprocess.maWindow.reduce((t,a)=>t+a[e],0);return[e,t/state.preprocess.maWindow.length]}))}if("EMA"===t){const t=normalizeNumber(state.settings.inputAlpha,.2,.001,1);return Object.fromEntries(IMU_ACCEL_AXES.map(a=>{const n=state.preprocess.ema[a],i=null==n?e[a]:n+t*(e[a]-n);return state.preprocess.ema[a]=i,[a,i]}))}return"IIR_LPF"===t?Object.fromEntries(IMU_ACCEL_AXES.map(t=>[t,applyAxisLowPass(t,e[t],i,a)])):"IIR_HPF"===t?Object.fromEntries(IMU_ACCEL_AXES.map(t=>[t,applyAxisHighPass(t,e[t],s,a)])):"IIR_BPF"===t?Object.fromEntries(IMU_ACCEL_AXES.map(t=>[t,applyAxisLowPass(t,applyAxisHighPass(t,e[t],s,a),i,a)])):makeAxisObject(e)}function normalizeImuSample(e){state.preprocess.filteredWindow.push(e);const t=getInputWindowSize();for(;state.preprocess.filteredWindow.length>t;)state.preprocess.filteredWindow.shift();if("NONE"===state.settings.normalizeMode)return e;const a={};for(const t of IMU_ACCEL_AXES){const n=state.preprocess.filteredWindow.map(e=>e[t]),i=n.reduce((e,t)=>e+t,0)/n.length;if("CENTER"===state.settings.normalizeMode)a[t]=e[t]-i;else if("ZSCORE"===state.settings.normalizeMode){const s=n.reduce((e,t)=>e+(t-i)**2,0)/n.length;a[t]=(e[t]-i)/Math.max(1e-6,Math.sqrt(s))}else if("MINMAX"===state.settings.normalizeMode){const i=Math.min(...n),s=Math.max(...n);a[t]=(e[t]-i)/Math.max(1e-6,s-i)*2-1}else a[t]=e[t]}return a}function processImuSample(e){const t=filterImuSample(e),a=normalizeImuSample(t);return{seq:e.seq,micros:e.micros,fax:t.ax,fay:t.ay,faz:t.az,pax:a.ax,pay:a.ay,paz:a.az,receivedAt:e.receivedAt}}function rebuildImuProcessing(){resetPreprocessState(),state.imuProcessedSamples=state.imuSamples.map(e=>processImuSample(e)),state.latestProcessedImu=state.imuProcessedSamples[state.imuProcessedSamples.length-1]||null}function getVisibleImuFrames(){const e=getInputWindowSize();return{raw:state.imuSamples.slice(-e),processed:state.imuProcessedSamples.slice(-e)}}function getDatasetWindowSize(){return Math.round(normalizeNumber(el.datasetWindowInput?.value,125,16,MAX_IMU_POINTS))}function getDatasetStrideSize(){return Math.round(normalizeNumber(el.datasetStrideInput?.value,31,1,MAX_IMU_POINTS))}function getDatasetWindow(e=el.datasetSourceSelect?.value||"PROCESSED"){const t=getDatasetWindowSize();return"RAW"===e?state.imuSamples.slice(-t).map(e=>({ax:e.ax,ay:e.ay,az:e.az,seq:e.seq,micros:e.micros})):state.imuProcessedSamples.slice(-t).map(e=>({ax:e.pax,ay:e.pay,az:e.paz,seq:e.seq,micros:e.micros}))}function featureNamesForMode(e,t){if("FLATTEN"===e){const e=[];for(let a=0;a<t;a++)e.push(`ax_${a}`,`ay_${a}`,`az_${a}`);return e}return IMU_ACCEL_AXES.flatMap(e=>[`${e}_mean`,`${e}_std`,`${e}_min`,`${e}_max`,`${e}_rms`])}function extractWindowFeatures(e,t){return"FLATTEN"===t?e.flatMap(e=>[e.ax,e.ay,e.az]):IMU_ACCEL_AXES.flatMap(t=>{const a=e.map(e=>e[t]),n=a.reduce((e,t)=>e+t,0)/a.length,i=a.reduce((e,t)=>e+(t-n)**2,0)/a.length,s=Math.min(...a),o=Math.max(...a),r=Math.sqrt(a.reduce((e,t)=>e+t*t,0)/a.length);return[n,Math.sqrt(i),s,o,r]})}function getPlannedFeatureSize(){const e=el.datasetFeatureSelect?.value||"STATS",t=getDatasetWindowSize();return"FLATTEN"===e?t*IMU_ACCEL_AXES.length:15}function getDatasetShape(){const e=state.dataset.examples,t=e.find(e=>Array.isArray(e.features)),a=t?.features?.length||getPlannedFeatureSize(),n=t?.windowSamples||getDatasetWindowSize(),i=labelCounts().length;return{examples:e.length,featureSize:a,windowSamples:n,labels:i,featureMode:t?.featureMode||el.datasetFeatureSelect?.value||"STATS",source:t?.source||el.datasetSourceSelect?.value||"PROCESSED"}}function formatDatasetSize(e=getDatasetShape()){return`${e.examples} x ${e.featureSize} features`}function captureDatasetWindow(e="manual"){const t=(el.datasetLabelInput.value||"unlabeled").trim()||"unlabeled",a=el.datasetSourceSelect.value,n=el.datasetFeatureSelect.value,i=getDatasetWindow(a),s=getDatasetWindowSize();if(i.length<s)return el.datasetCaptureState.textContent=`Need ${s}`,!1;const o=extractWindowFeatures(i,n),r={id:state.dataset.nextId++,label:t,source:a,featureMode:n,featureNames:featureNamesForMode(n,i.length),features:o,window:i,windowSamples:i.length,strideSamples:getDatasetStrideSize(),rateHz:state.settings.rateHz,preprocessing:{inputFilter:state.settings.inputFilter,normalizeMode:state.settings.normalizeMode,inputWindowSamples:state.settings.inputWindowSamples,inputAlpha:state.settings.inputAlpha,inputMaWindow:state.settings.inputMaWindow,inputIirOrder:state.settings.inputIirOrder,inputIirLowHz:state.settings.inputIirLowHz,inputIirHighHz:state.settings.inputIirHighHz},seqStart:i[0]?.seq??null,seqEnd:i[i.length-1]?.seq??null,capturedAt:(new Date).toISOString(),reason:e};return state.dataset.examples.push(r),state.dataset.lastCaptureSeq=r.seqEnd,el.datasetCaptureState.textContent=state.dataset.captureActive?"Capturing":"Captured",renderDatasetView(),setUiEnabled(),!0}function maybeCaptureDatasetWindow(e){if(!state.dataset.captureActive)return;const t=getDatasetStrideSize(),a=state.dataset.lastCaptureSeq;(null==a||e.seq-a>=t)&&captureDatasetWindow("stream")}function labelCounts(){const e=new Map;for(const t of state.dataset.examples)e.set(t.label,(e.get(t.label)||0)+1);return[...e.entries()].sort((e,t)=>t[1]-e[1]||e[0].localeCompare(t[0]))}function renderDatasetView(){const e=state.dataset.examples,t=labelCounts(),a=getDatasetShape();el.datasetSummary.textContent=`${e.length} windows`,el.datasetSizeState.textContent=`${formatDatasetSize(a)} - ${a.labels} labels`,el.datasetFeatureState.textContent=e.length>0?`${a.featureSize} features`:`${a.featureSize} planned`,el.datasetCaptureState.textContent=state.dataset.captureActive?"Capturing":"Idle",drawDatasetPreview(),el.datasetLabelList.replaceChildren(...(t.length>0?t:[["No labels",0]]).map(([e,t])=>{const a=document.createElement("div");a.className="dataset-label-row";const n=document.createElement("span");n.textContent=e;const i=document.createElement("strong");return i.textContent=String(t),a.append(n,i),a})),el.datasetTableBody.replaceChildren(...e.slice(-80).reverse().map(e=>{const t=document.createElement("tr");return[e.id,e.label,e.windowSamples,e.featureMode,e.source].forEach(e=>{const a=document.createElement("td");a.textContent=String(e),t.append(a)}),t}))}function drawDatasetPreview(){if(!el.datasetPreviewCanvas)return;const{ctx:e,width:t,height:a}=resizeAuxCanvasToDisplaySize(el.datasetPreviewCanvas,180),n=getDatasetWindowSize(),i=getDatasetWindow(el.datasetSourceSelect?.value||"PROCESSED");el.datasetPreviewState.textContent=`${i.length} / ${n} samples`,e.clearRect(0,0,t,a),e.fillStyle="#ffffff",e.fillRect(0,0,t,a);const s=t<560?{left:40,right:14,top:18,bottom:30}:{left:54,right:18,top:18,bottom:34},o=t-s.left-s.right,r=a-s.top-s.bottom;if(drawGridOn(e,t,a,s,o,r),i.length<2)return e.fillStyle="#637083",e.font="14px Segoe UI, Arial, sans-serif",void e.fillText("Waiting for IMU window data",s.left+12,s.top+32);const l=i.flatMap(e=>IMU_ACCEL_AXES.map(t=>e[t]));let c=Math.min(...l),d=Math.max(...l);const u=Math.max(.02,.12*(d-c));c-=u,d+=u,Math.abs(d-c)<1e-6&&(c-=.5,d+=.5);for(const t of IMU_ACCEL_AXES)drawDatasetPreviewLine(e,i,t,AXIS_COLORS[t],c,d,s,o,r);e.fillStyle="#637083",e.font="11px Segoe UI, Arial, sans-serif",e.fillText(`${d.toFixed(2)} ${getInputUnits()}`,8,s.top+4),e.fillText(`${c.toFixed(2)} ${getInputUnits()}`,8,a-s.bottom),drawLegendOn(e,[{color:AXIS_COLORS.ax,label:"x"},{color:AXIS_COLORS.ay,label:"y"},{color:AXIS_COLORS.az,label:"z"}],s.left+8,s.top+18)}function drawDatasetPreviewLine(e,t,a,n,i,s,o,r,l){e.strokeStyle=n,e.lineWidth=2,e.beginPath(),t.forEach((n,c)=>{const d=o.left+r*c/Math.max(1,t.length-1),u=(n[a]-i)/(s-i),p=o.top+l-u*l;0===c?e.moveTo(d,p):e.lineTo(d,p)}),e.stroke()}function toggleDatasetCapture(){state.dataset.captureActive=!state.dataset.captureActive,state.dataset.lastCaptureSeq=null,el.datasetCaptureState.textContent=state.dataset.captureActive?"Capturing":"Idle",setUiEnabled()}function clearDataset(){state.dataset.examples=[],state.dataset.nextId=1,state.dataset.lastCaptureSeq=null,state.dataset.captureActive=!1,state.model.trained=null,state.model.metrics=null,state.model.trainingLog=[],renderDatasetView(),renderModelView(),setUiEnabled()}function buildDatasetPayload(){return{type:"keti_window_dataset",version:1,exportedAt:(new Date).toISOString(),board:"Arduino Nano 33 BLE Rev2",examples:state.dataset.examples}}function exportDatasetJson(){downloadText("keti_imu_dataset","json",JSON.stringify(buildDatasetPayload(),null,2),"application/json;charset=utf-8")}function exportDatasetCsv(){downloadText("keti_imu_dataset","csv",["id","label","source","feature_mode","window_samples","seq_start","seq_end","rate_hz","captured_at","features"].join(",")+"\n"+state.dataset.examples.map(e=>[e.id,csvCell(e.label),e.source,e.featureMode,e.windowSamples,e.seqStart??"",e.seqEnd??"",e.rateHz,e.capturedAt,csvCell(e.features.join(" "))].join(",")).join("\n")+"\n","text/csv;charset=utf-8")}async function importDatasetJson(e){const t=e.target.files?.[0];if(t)try{const e=JSON.parse(await t.text()),a=Array.isArray(e.examples)?e.examples:[];state.dataset.examples=a.filter(e=>Array.isArray(e.features)&&e.label),state.dataset.nextId=Math.max(0,...state.dataset.examples.map(e=>Number(e.id)||0))+1,state.dataset.captureActive=!1,state.dataset.lastCaptureSeq=null,renderDatasetView(),logLine(`DATASET_IMPORT,count=${state.dataset.examples.length}`)}catch(e){logLine(`ERR,dataset_import,${e.message}`)}finally{e.target.value="",setUiEnabled()}}function getTrainingDataset(){const e=state.dataset.examples.filter(e=>Array.isArray(e.features));if(e.length<2)throw new Error("Need at least two captured windows");const t=e[0].features.length;if(!e.every(e=>e.features.length===t))throw new Error("All dataset windows must use the same feature mode and window length");const a=[...new Set(e.map(e=>e.label))].sort();if(a.length<2)throw new Error("Need at least two labels");const n=Array(t).fill(0),i=Array(t).fill(0);for(const t of e)t.features.forEach((e,t)=>{n[t]+=e});for(let a=0;a<t;a++)n[a]/=e.length;for(const t of e)t.features.forEach((e,t)=>{i[t]+=(e-n[t])**2});for(let a=0;a<t;a++)i[a]=Math.max(1e-6,Math.sqrt(i[a]/e.length));return{examples:e,labels:a,inputSize:t,mean:n,std:i,x:e.map(e=>e.features.map((e,t)=>(e-n[t])/i[t])),y:e.map(e=>a.indexOf(e.label))}}function randomWeight(e){return(2*Math.random()-1)*e}function initializeAnn(e,t,a,n,i){const s=[e,...Array(t).fill(a),n],o=[];for(let e=1;e<s.length;e++){const t=s[e-1],a=s[e],n=Math.sqrt(2/Math.max(1,t));o.push({weights:Array.from({length:a},()=>Array.from({length:t},()=>randomWeight(n))),biases:Array(a).fill(0)})}return{sizes:s,activation:i,layers:o}}function activate(e,t){return"tanh"===t?Math.tanh(e):"sigmoid"===t?1/(1+Math.exp(-e)):Math.max(0,e)}function activationDerivative(e,t){if("tanh"===t){const t=Math.tanh(e);return 1-t*t}if("sigmoid"===t){const t=1/(1+Math.exp(-e));return t*(1-t)}return e>0?1:0}function softmax(e){const t=Math.max(...e),a=e.map(e=>Math.exp(e-t)),n=a.reduce((e,t)=>e+t,0);return a.map(e=>e/Math.max(1e-12,n))}function annForward(e,t){const a=[t],n=[];let i=t;return e.layers.forEach((t,s)=>{const o=t.weights.map((e,a)=>e.reduce((e,t,a)=>e+t*i[a],t.biases[a]));n.push(o),i=s===e.layers.length-1?softmax(o):o.map(t=>activate(t,e.activation)),a.push(i)}),{output:i,activations:a,preActivations:n}}function trainAnn(e,t){const a=initializeAnn(e.inputSize,t.hiddenLayers,t.neurons,e.labels.length,t.activation),n=[],i=e.x.map((e,t)=>t);for(let s=0;s<t.epochs;s++){shuffle(i);let o=0,r=0;for(const n of i){const i=e.x[n],s=e.y[n],l=annForward(a,i),c=l.output;o+=-Math.log(Math.max(1e-9,c[s])),argMax(c)===s&&r++;let d=c.map((e,t)=>e-(t===s?1:0));for(let e=a.layers.length-1;e>=0;e--){const n=a.layers[e],i=l.activations[e],s=n.weights.map(e=>e.slice());for(let e=0;e<n.weights.length;e++){for(let a=0;a<n.weights[e].length;a++)n.weights[e][a]-=t.learningRate*d[e]*i[a];n.biases[e]-=t.learningRate*d[e]}if(e>0){const t=Array(a.layers[e-1].weights.length).fill(0);for(let n=0;n<t.length;n++){let i=0;for(let e=0;e<s.length;e++)i+=s[e][n]*d[e];t[n]=i*activationDerivative(l.preActivations[e-1][n],a.activation)}d=t}}}0!==s&&s!==t.epochs-1&&(s+1)%Math.max(1,Math.floor(t.epochs/8))!==0||n.push({epoch:s+1,loss:o/e.x.length,accuracy:r/e.x.length})}return{model:a,history:n}}function shuffle(e){for(let t=e.length-1;t>0;t--){const a=Math.floor(Math.random()*(t+1));[e[t],e[a]]=[e[a],e[t]]}}function argMax(e){let t=0;for(let a=1;a<e.length;a++)e[a]>e[t]&&(t=a);return t}function pruneAnn(e,t){if(t<=0)return 0;const a=e.layers.flatMap(e=>e.weights.flatMap(e=>e.map(e=>Math.abs(e))));if(0===a.length)return 0;const n=[...a].sort((e,t)=>e-t),i=n[Math.min(n.length-1,Math.floor(n.length*t))];let s=0;for(const t of e.layers)for(const e of t.weights)for(let t=0;t<e.length;t++)Math.abs(e[t])<=i&&(0!==e[t]&&s++,e[t]=0);return s/a.length}function evaluateAnn(e,t){let a=0;const n=t.labels.map(()=>Array(t.labels.length).fill(0));return t.x.forEach((i,s)=>{const o=argMax(annForward(e,i).output),r=t.y[s];n[r][o]++,o===r&&a++}),{accuracy:a/t.x.length,confusion:n}}function countWeights(e){return e.layers.reduce((e,t)=>e+t.weights.reduce((e,t)=>e+t.length,0),0)}function countNonzeroWeights(e){return e.layers.reduce((e,t)=>e+t.weights.reduce((e,t)=>e+t.filter(e=>0!==e).length,0),0)}function quantizeLayers(e){return e.layers.map(e=>{const t=e.weights.flat(),a=Math.max(1e-9,...t.map(e=>Math.abs(e)))/127;return{scale:a,weights:e.weights.map(e=>e.map(e=>Math.max(-128,Math.min(127,Math.round(e/a))))),biases:e.biases.slice()}})}function getModelOptions(){return{hiddenLayers:Math.round(normalizeNumber(el.hiddenLayerInput.value,1,0,4)),neurons:Math.round(normalizeNumber(el.neuronInput.value,16,2,128)),activation:el.activationSelect.value,learningRate:normalizeNumber(el.learningRateInput.value,.02,1e-4,1),epochs:Math.round(normalizeNumber(el.epochInput.value,120,1,2e3)),pruningSparsity:normalizeNumber(el.pruningInput.value,0,0,.95),quantizedExport:el.quantizeToggle.checked}}function getPlannedModelSizes(){return getPlannedModelArchitecture().sizes}function getPlannedModelArchitecture(){const e=getDatasetShape(),t=getModelOptions(),a=e.labels>=2;return{sizes:[e.featureSize,...Array(t.hiddenLayers).fill(t.neurons),a?e.labels:0],outputReady:a,labelCount:e.labels}}function layerName(e,t){return 0===e?"Input":e===t-1?"Output":`Hidden ${e}`}function formatNeuronCount(e,t=!1){return t?"set labels first":`${e} neuron${1===e?"":"s"}`}function formatArchitectureShape(e,t=!1){return e.map((a,n)=>t&&n===e.length-1?"labels":String(a)).join(" -> ")}function drawArchitectureConnections(e,t,a,n){const i=[],s=(e,n)=>{const s=t[Math.max(0,Math.min(t.length-1,e))],o=a[Math.max(0,Math.min(a.length-1,n))],r=`${s.x},${s.y},${o.x},${o.y}`;i.some(e=>e.key===r)||i.push({from:s,to:o,key:r})};for(let e=0;e<t.length;e++){s(e,Math.round(e*Math.max(0,a.length-1)/Math.max(1,t.length-1)))}for(let e=0;e<a.length;e++){s(Math.round(e*Math.max(0,t.length-1)/Math.max(1,a.length-1)),e)}for(const{from:t,to:a}of i)e.beginPath(),e.moveTo(t.x+n,t.y),e.lineTo(a.x-n,a.y),e.stroke()}function renderModelArchitecture(){if(!el.modelArchitectureCanvas)return;const e=getPlannedModelArchitecture(),t=state.model.trained,a=t?.sizes||e.sizes,n=!t&&!e.outputReady,{ctx:i,width:s,height:o}=resizeAuxCanvasToDisplaySize(el.modelArchitectureCanvas,210);if(i.clearRect(0,0,s,o),i.fillStyle="#ffffff",i.fillRect(0,0,s,o),a.length<2)return i.fillStyle="#637083",i.font="14px Segoe UI, Arial, sans-serif",void i.fillText("Capture data to define model input/output",18,36);const r=s<620?{left:46,right:46,top:38,bottom:48}:{left:62,right:62,top:42,bottom:52},l=1===a.length?0:(s-r.left-r.right)/Math.max(1,a.length-1),c=s<620?8:12,d=s<620?5:6,u=a.map((e,t)=>{const a=Math.max(1,Math.min(e,c)),n=o-r.top-r.bottom,i=a<=1?0:Math.min(20,n/Math.max(1,a-1)),s=i*Math.max(0,a-1),d=r.top+n/2-s/2,u=r.left+l*t;return Array.from({length:a},(e,t)=>({x:u,y:d+i*t}))});i.save(),i.globalAlpha=.24,i.strokeStyle="#637083",i.lineWidth=1;for(let e=0;e<u.length-1;e++)drawArchitectureConnections(i,u[e],u[e+1],d);i.restore(),a.forEach((e,t)=>{const s=u[t],l=t===a.length-1,c=n&&l,p=0===t?"#008c8c":l?"#2767c9":"#d28a00";for(const e of s)i.fillStyle=c?"#f2f5f8":p,i.beginPath(),i.arc(e.x,e.y,d,0,2*Math.PI),i.fill(),i.strokeStyle=c?"#9aa8b7":"#ffffff",i.lineWidth=c?1.8:1.5,i.stroke();e>s.length&&(i.fillStyle="#637083",i.font="12px Segoe UI, Arial, sans-serif",i.textAlign="center",i.fillText("+"+(e-s.length),s[0].x,o-r.bottom+2)),i.fillStyle="#17202a",i.font="700 12px Segoe UI, Arial, sans-serif",i.textAlign="center",i.fillText(layerName(t,a.length),s[0].x,18),i.fillStyle="#637083",i.font="12px Segoe UI, Arial, sans-serif",i.fillText(formatNeuronCount(e,c),s[0].x,o-18)}),i.textAlign="start"}function trainBrowserModel(){try{const e=getTrainingDataset(),t=getModelOptions();el.modelStatus.textContent="Training",renderModelLog(["Training started"]);const{model:a,history:n}=trainAnn(e,t),i=pruneAnn(a,t.pruningSparsity),s=evaluateAnn(a,e);state.model={trained:{type:"keti_browser_ann",version:1,createdAt:(new Date).toISOString(),options:t,labels:e.labels,inputSize:e.inputSize,inputMean:e.mean,
-inputStd:e.std,featureNames:e.examples[0].featureNames||featureNamesForMode(e.examples[0].featureMode,e.examples[0].windowSamples),featureMode:e.examples[0].featureMode,windowSamples:e.examples[0].windowSamples,source:e.examples[0].source,preprocessing:e.examples[0].preprocessing,sizes:a.sizes,activation:a.activation,layers:a.layers,quantizedLayers:t.quantizedExport?quantizeLayers(a):null},labels:e.labels,inputSize:e.inputSize,metrics:{...s,examples:e.examples.length,totalWeights:countWeights(a),nonzeroWeights:countNonzeroWeights(a),actualSparsity:i},trainingLog:n},renderModelView(),logLine(`MODEL_TRAINED,labels=${e.labels.length},input=${e.inputSize},acc=${s.accuracy.toFixed(3)}`)}catch(e){el.modelStatus.textContent="Error",renderModelLog([`ERR ${e.message}`]),logLine(`ERR,model_train,${e.message}`)}finally{setUiEnabled()}}function renderModelView(){const e=state.dataset.examples.length,t=getDatasetShape();if(renderModelArchitecture(),!state.model.trained){const a=getPlannedModelArchitecture();return el.modelStatus.textContent=e>1&&t.labels>=2?"Ready":t.labels<2?"Need labels":"Need data",el.modelShapeState.textContent=`${formatArchitectureShape(a.sizes,!a.outputReady)} planned`,el.modelMetricState.textContent=formatDatasetSize(t),el.modelMetrics.replaceChildren(metricRow("Input Dataset",formatDatasetSize(t)),metricRow("Windows",`${e}`),metricRow("Labels",t.labels>=2?`${t.labels}`:`${t.labels}/2 needed`),metricRow("Window Samples",`${t.windowSamples}`),metricRow("Feature Mode",t.featureMode)),void renderModelLog(state.model.trainingLog.length?state.model.trainingLog:["Capture at least two labels, then train."])}const a=state.model.trained,n=state.model.metrics;el.modelStatus.textContent="Trained",el.modelShapeState.textContent=a.sizes.join(" -> "),el.modelMetricState.textContent=`${(100*n.accuracy).toFixed(1)}%`,el.modelMetrics.replaceChildren(metricRow("Accuracy",`${(100*n.accuracy).toFixed(1)}%`),metricRow("Input Dataset",`${n.examples} x ${a.inputSize} features`),metricRow("Window Samples",`${a.windowSamples}`),metricRow("Labels",a.labels.join(", ")),metricRow("Weights",`${n.nonzeroWeights}/${n.totalWeights}`),metricRow("Sparsity",`${(100*n.actualSparsity).toFixed(1)}%`),metricRow("Export",a.quantizedLayers?"int8 + float metadata":"float arrays")),renderModelLog(state.model.trainingLog.map(e=>`epoch ${e.epoch}: loss=${e.loss.toFixed(4)}, acc=${(100*e.accuracy).toFixed(1)}%`))}function metricRow(e,t){const a=document.createElement("div");a.className="metric-row";const n=document.createElement("span");n.textContent=e;const i=document.createElement("strong");return i.textContent=t,a.append(n,i),a}function renderModelLog(e){el.modelLog.textContent=e.join("\n")}function exportModelJson(){state.model.trained&&downloadText("keti_browser_ann_model","json",JSON.stringify(state.model.trained,null,2),"application/json;charset=utf-8")}function arrayToC(e,t,a="float"){const n=t.map(e=>"float"===a?`${Number(e).toPrecision(8)}f`:String(e)),i=[];for(let e=0;e<n.length;e+=12)i.push(`  ${n.slice(e,e+12).join(", ")}`);return`static const ${a} ${e}[${t.length}] = {\n${i.join(",\n")}\n};`}function exportCArray(){const e=state.model.trained;if(!e)return;const t=["#ifndef KETI_BROWSER_ANN_MODEL_H","#define KETI_BROWSER_ANN_MODEL_H","","#include <stdint.h>","",`#define KETI_MODEL_INPUT_SIZE ${e.inputSize}`,`#define KETI_MODEL_OUTPUT_SIZE ${e.labels.length}`,`#define KETI_MODEL_LAYER_COUNT ${e.layers.length}`,"",arrayToC("keti_model_input_mean",e.inputMean),"",arrayToC("keti_model_input_std",e.inputStd),"",`static const char* keti_model_labels[${e.labels.length}] = { ${e.labels.map(e=>`"${e.replace(/\\/g,"\\\\").replace(/"/g,'\\"')}"`).join(", ")} };`,""];e.layers.forEach((a,n)=>{const i=a.weights.length,s=a.weights[0]?.length||0;if(t.push(`#define KETI_LAYER_${n}_ROWS ${i}`),t.push(`#define KETI_LAYER_${n}_COLS ${s}`),e.quantizedLayers){const a=e.quantizedLayers[n];t.push(`static const float keti_layer_${n}_weight_scale = ${a.scale.toPrecision(8)}f;`),t.push(arrayToC(`keti_layer_${n}_weights_q`,a.weights.flat(),"int8_t"))}else t.push(arrayToC(`keti_layer_${n}_weights`,a.weights.flat()));t.push(arrayToC(`keti_layer_${n}_biases`,a.biases)),t.push("")}),t.push("#endif"),downloadText("keti_browser_ann_model","h",t.join("\n"),"text/x-chdr;charset=utf-8")}function downloadText(e,t,a,n){const i=new Blob([a],{type:n}),s=URL.createObjectURL(i),o=document.createElement("a"),r=(new Date).toISOString().replace(/[:.]/g,"-");o.href=s,o.download=`${e}_${r}.${t}`,o.click(),URL.revokeObjectURL(s)}function populateFirmwareSelect(e){const t=el.firmwareSelect.value||"stage1_lab_console",a=e.length>0?e:DEFAULT_PREBUILT_FIRMWARES;el.firmwareSelect.replaceChildren(...a.map(e=>{const t=document.createElement("option");return t.value=e.id,t.textContent=`${e.id} v${e.version||"unknown"}`,t.dataset.fqbn=e.fqbn||"",t})),[...el.firmwareSelect.options].some(e=>e.value===t)&&(el.firmwareSelect.value=t)}async function loadDirectFirmwareManifest(){for(const e of DIRECT_MANIFEST_PATHS)try{const t=await fetch(e,{cache:"no-store"});if(!t.ok)continue;const a=await t.json();if(!Array.isArray(a.firmware))continue;return state.flash.directFirmwares=a.firmware,state.flash.directBasePath=e.replace(/manifest\.json$/i,""),populateFirmwareSelect(state.flash.directFirmwares),void logLine(`DIRECT_MANIFEST,${e},items=${a.firmware.length}`)}catch(e){}state.flash.directFirmwares=DEFAULT_PREBUILT_FIRMWARES,populateFirmwareSelect(state.flash.directFirmwares),logLine("DIRECT_MANIFEST,default")}function getSelectedFirmware(){const e=el.firmwareSelect.value||"stage1_lab_console";return[...state.flash.directFirmwares,...DEFAULT_PREBUILT_FIRMWARES].find(t=>t.id===e)||DEFAULT_PREBUILT_FIRMWARES[0]}async function fetchFirmwareBytes(e){const t=[state.flash.directBasePath,"firmware/prebuilt/","../firmware/prebuilt/"].filter(Boolean),a=[...new Set(t)];for(const t of a)try{const a=new URL(t,window.location.href),n=new URL(e.file,a),i=await fetch(n.href,{cache:"no-store"});if(!i.ok)continue;const s=await i.arrayBuffer();return{bytes:new Uint8Array(s),source:n.href}}catch(e){}throw new Error("Could not load static firmware from the prebuilt assets")}async function sha256Hex(e){if(!crypto.subtle)throw new Error("SHA-256 verification requires Web Crypto support");const t=await crypto.subtle.digest("SHA-256",e);return[...new Uint8Array(t)].map(e=>e.toString(16).padStart(2,"0")).join("").toUpperCase()}async function verifyFirmwareBytes(e,t){if(t.size_bytes&&e.length!==Number(t.size_bytes))throw new Error(`Firmware size mismatch: expected ${t.size_bytes}, got ${e.length}`);if(t.sha256){const a=await sha256Hex(e);if(a!==String(t.sha256).toUpperCase())throw new Error(`Firmware SHA-256 mismatch: ${a}`)}}async function loadDirectFirmwareBytes(e){const t=await fetchFirmwareBytes(e),a=t.bytes,n=t.source;return await verifyFirmwareBytes(a,e),{bytes:a,source:n}}function setDirectFlashProgress(e,t){el.flashProgress.value=Math.max(0,Math.min(100,e)),t&&(el.flashState.textContent=t)}function isArduinoSerialPort(e){if(!e||"function"!=typeof e.getInfo)return!0;const t=e.getInfo();return 9025===t.usbVendorId||10755===t.usbVendorId}async function getGrantedArduinoSerialPorts(e=null){if(!navigator.serial.getPorts)return[];return(await navigator.serial.getPorts()).filter(t=>t!==e&&isArduinoSerialPort(t))}async function waitForGrantedBootloaderPort(e){const t=performance.now();for(;performance.now()-t<BOOTLOADER_REENUMERATE_WAIT_MS;){const t=await getGrantedArduinoSerialPorts(e);if(1===t.length)return t[0];if(t.length>1)return logLine(`DIRECT_FLASH,bootloader_auto_ambiguous,count=${t.length}`),null;await sleep(BOOTLOADER_POLL_INTERVAL_MS)}return null}async function requestArduinoSerialPort(){return navigator.serial.requestPort({filters:window.KetiDirectFlash.ARDUINO_USB_FILTERS})}async function stopActiveSessionBeforeBootloader(){const e=state.port;if(!state.connected)return null;if(setDirectFlashProgress(1,"Stopping stream"),state.writer){try{await sendCommand("CLS OFF"),await sleep(80)}catch(e){logLine(`ERR,bootloader_cls_off,${e.message}`)}try{await sendCommand("STOP"),await sleep(150)}catch(e){logLine(`ERR,bootloader_stop,${e.message}`)}}return state.streaming=!1,state.recording=!1,state.classification.active=!1,await disconnectDevice(),await sleep(350),e}async function touchApplicationPortIntoBootloader(){let e=await stopActiveSessionBeforeBootloader();e||(setDirectFlashProgress(0,"Select app port"),e=await requestArduinoSerialPort()),setDirectFlashProgress(2,"Force reset");try{await window.KetiDirectFlash.forceSerialReset(e),logLine("DIRECT_FLASH,force_reset")}catch(t){logLine(`ERR,direct_force_reset,${t.message}`),setDirectFlashProgress(2,"Select app port"),e=await requestArduinoSerialPort()}setDirectFlashProgress(4,"Bootloader touch");try{await window.KetiDirectFlash.touch1200BpsReset(e)}catch(t){logLine(`ERR,direct_touch_after_reset,${t.message}`),setDirectFlashProgress(4,"Select app port"),e=await requestArduinoSerialPort(),await window.KetiDirectFlash.touch1200BpsReset(e)}return state.flash.directBootloaderTouched=!0,logLine("DIRECT_FLASH,bootloader_touch_1200bps"),e}async function enterBootloaderAndResolvePort(){const e=await touchApplicationPortIntoBootloader();setDirectFlashProgress(6,"Finding bootloader");const t=await waitForGrantedBootloaderPort(e);return t?(logLine("DIRECT_FLASH,bootloader_auto_port"),t):(setDirectFlashProgress(6,"Select bootloader"),logLine("DIRECT_FLASH,bootloader_manual_select_required"),requestArduinoSerialPort())}function isDirectBootloaderError(e){const t=String(e?.message||"");return/bootloader|SAM-BA|N# ack|Unexpected bootloader target|Arduino extension|Timed out waiting/i.test(t)}function createDirectFlashTimeoutError(e,t,a){const n=new Error(`Direct flash ${t} ${e} timeout after ${a} ms`);return n.name="DirectFlashTimeoutError",n.directFlashTimeout=!0,n.timeoutKind=e,n.attemptLabel=t,n.timeoutMs=a,n}function isDirectFlashTimeoutError(e){const t=String(e?.message||"");return Boolean(e?.directFlashTimeout)||/Direct flash .* timeout after|Writing page .* failed: .*timed out|Writing bootloader .*timed out/i.test(t)}function isMidFlashTimeoutLikeError(e,t){const a=String(e?.message||""),n=String(t||"");return/timed out|timeout|Transport closed/i.test(a)&&/Preparing flash|Erasing flash|Writing page|Wrote page|Resetting board/i.test(n)}function asDirectFlashTimeoutError(e,t,a){if(isDirectFlashTimeoutError(e))return e;if(!isMidFlashTimeoutLikeError(e,a))return e;const n=createDirectFlashTimeoutError("operation",t,DIRECT_FLASH_STALL_TIMEOUT_MS);return n.message=`${n.message}: ${e.message}`,n.cause=e,n}function createDirectFlasher(e,t=null){return new window.KetiDirectFlash.DirectSamBaFlasher({onLog:t=>logLine(`DIRECT_FLASH,${e},${t}`),onProgress:e=>{setDirectFlashProgress(e.percent,e.message),t&&t(e)}})}async function closeDirectFlasher(e,t){if(e&&"function"==typeof e.close)try{await Promise.race([e.close(),sleep(DIRECT_FLASH_CLOSE_TIMEOUT_MS).then(()=>{throw new Error(`close timeout after ${DIRECT_FLASH_CLOSE_TIMEOUT_MS} ms`)})]),logLine(`DIRECT_FLASH,closed,reason=${t}`)}catch(e){logLine(`ERR,direct_flash_close,${e.message}`)}}async function runTimedDirectOperation({port:e,firmwareBytes:t,attemptLabel:a,operation:n="flash",skipErase:i=!1}){let s=null,o=null,r=null,l=null,c="";const d=()=>{clearTimeout(s),clearTimeout(o),s=null,o=null},u=e=>{l||(l=e,logLine(`DIRECT_FLASH_TIMEOUT,attempt=${a},kind=${e.timeoutKind},ms=${e.timeoutMs}`),r&&r(e))},p=()=>{clearTimeout(s),s=setTimeout(()=>{u(createDirectFlashTimeoutError("stall",a,DIRECT_FLASH_STALL_TIMEOUT_MS))},DIRECT_FLASH_STALL_TIMEOUT_MS)},m=new Promise((e,t)=>{r=t}),g=createDirectFlasher(a,e=>{c=e.message||"",p()});p(),o=setTimeout(()=>{u(createDirectFlashTimeoutError("total",a,DIRECT_FLASH_TOTAL_TIMEOUT_MS))},DIRECT_FLASH_TOTAL_TIMEOUT_MS);const f="erase"===n?g.eraseApplication({port:e,firmwareBytes:t,maxSketchSize:window.KetiDirectFlash.MAX_SKETCH_SIZE}):g.flash({port:e,firmwareBytes:t,maxSketchSize:window.KetiDirectFlash.MAX_SKETCH_SIZE,skipErase:i});try{await Promise.race([f,m])}catch(e){const t=asDirectFlashTimeoutError(e,a,c);if(isDirectFlashTimeoutError(t)){setDirectFlashProgress(0,"erase"===n?"Erase timeout":"recovery"===a?"Recovery timeout":"Flash timeout"),await closeDirectFlasher(g,`timeout_${a}`),f.catch(e=>{logLine(`ERR,direct_flash_late_reject,${e.message}`)})}throw t}finally{d()}}async function runTimedDirectErase({port:e,firmwareBytes:t,attemptLabel:a}){await runTimedDirectOperation({port:e,firmwareBytes:t,attemptLabel:a,operation:"erase"})}async function runTimedDirectFlash({port:e,firmwareBytes:t,attemptLabel:a,skipErase:n=!1}){await runTimedDirectOperation({port:e,firmwareBytes:t,attemptLabel:a,operation:"flash",skipErase:n})}async function probeRecoveryBootloaderPort(e,t){try{return await window.KetiDirectFlash.probeBootloaderPort(e,{onLog:e=>logLine(`DIRECT_FLASH,recovery_probe_${t},${e}`),onProgress:({percent:e,message:t})=>setDirectFlashProgress(Math.min(8,e),t)}),logLine(`DIRECT_FLASH_RECOVERY,bootloader_port=${t}`),!0}catch(e){return logLine(`ERR,direct_recovery_probe_${t},${e.message}`),!1}}async function findGrantedRecoveryBootloaderPort(){const e=await getGrantedArduinoSerialPorts();for(let t=0;t<e.length;t++)if(setDirectFlashProgress(1,`Recovery probe ${t+1}/${e.length}`),await probeRecoveryBootloaderPort(e[t],`granted_${t+1}`))return e[t];return null}async function touchRecoveryPortIntoBootloader(e){setDirectFlashProgress(2,"Recovery reset");try{await window.KetiDirectFlash.forceSerialReset(e),logLine("DIRECT_FLASH_RECOVERY,force_reset")}catch(e){logLine(`ERR,direct_recovery_force_reset,${e.message}`)}setDirectFlashProgress(4,"Recovery touch"),await window.KetiDirectFlash.touch1200BpsReset(e),state.flash.directBootloaderTouched=!0,logLine("DIRECT_FLASH_RECOVERY,bootloader_touch_1200bps"),setDirectFlashProgress(6,"Recovery finding bootloader");const t=await waitForGrantedBootloaderPort(e);return t?(logLine("DIRECT_FLASH_RECOVERY,bootloader_auto_port"),t):(setDirectFlashProgress(6,"Recovery select bootloader"),logLine("DIRECT_FLASH_RECOVERY,manual_bootloader_select_required"),requestArduinoSerialPort())}async function selectRecoveryBootloaderPort(){const e=await findGrantedRecoveryBootloaderPort();if(e)return e;setDirectFlashProgress(0,"Recovery select port");const t=await requestArduinoSerialPort();return await probeRecoveryBootloaderPort(t,"selected")?t:touchRecoveryPortIntoBootloader(t)}async function resolvePostEraseBootloaderPort(e){if(setDirectFlashProgress(11,"Erase settle"),await sleep(DIRECT_FLASH_POST_ERASE_SETTLE_MS),await probeRecoveryBootloaderPort(e,"post_erase_same"))return e;const t=await findGrantedRecoveryBootloaderPort();if(t)return t;setDirectFlashProgress(11,"Select bootloader"),logLine("DIRECT_FLASH,post_erase_manual_select_required");const a=await requestArduinoSerialPort();return await probeRecoveryBootloaderPort(a,"post_erase_selected")?a:touchRecoveryPortIntoBootloader(a)}async function runDirectFlashWithPreErase({port:e,firmwareBytes:t,attemptLabel:a}){if(!DIRECT_FLASH_SEPARATE_ERASE)return void await runTimedDirectFlash({port:e,firmwareBytes:t,attemptLabel:a});await runTimedDirectErase({port:e,firmwareBytes:t,attemptLabel:`${a}_erase`});const n=await resolvePostEraseBootloaderPort(e);await runTimedDirectFlash({port:n,firmwareBytes:t,attemptLabel:a,skipErase:!0})}async function runRecoveryFlashAfterTimeout({loaded:e,firmware:t,reason:a}){logLine(`DIRECT_FLASH_RECOVERY,start,firmware=${t.id},reason=${a.message}`),state.flash.directBootloaderTouched=!1,setDirectFlashProgress(0,"Recovery flash");const n=await selectRecoveryBootloaderPort();await runDirectFlashWithPreErase({port:n,firmwareBytes:e.bytes,attemptLabel:"recovery"}),state.flash.directBootloaderTouched=!1,setDirectFlashProgress(100,"Recovery OK"),logLine(`DIRECT_FLASH_RECOVERY_OK,firmware=${t.id}`)}async function enterBootloaderDirect(){if(!("serial"in navigator)||!window.KetiDirectFlash)return setDirectFlashProgress(0,"Unavailable"),void logLine("ERR,direct_flash,web_serial_unavailable");state.flash.directBusy=!0,setDirectFlashProgress(0,"Select app port"),setUiEnabled();try{await touchApplicationPortIntoBootloader(),setDirectFlashProgress(5,"Select bootloader")}catch(e){state.flash.directBootloaderTouched=!1,setDirectFlashProgress(0,"Bootloader failed"),logLine(`ERR,direct_bootloader,${e.message}`)}finally{state.flash.directBusy=!1,setUiEnabled()}}async function flashFirmware(){if(!("serial"in navigator)||!window.KetiDirectFlash)return setDirectFlashProgress(0,"Unavailable"),void logLine("ERR,direct_flash,web_serial_unavailable");const e=getSelectedFirmware();state.flash.directBusy=!0,setDirectFlashProgress(0,"Loading BIN"),setUiEnabled();try{const t=await loadDirectFirmwareBytes(e);logLine(`DIRECT_FLASH,firmware=${e.id},bytes=${t.bytes.length},source=${t.source}`);try{setDirectFlashProgress(0,state.flash.directBootloaderTouched?"Select bootloader":"Select app port");const e=state.flash.directBootloaderTouched?await requestArduinoSerialPort():await enterBootloaderAndResolvePort();await runDirectFlashWithPreErase({port:e,firmwareBytes:t.bytes,attemptLabel:"normal"})}catch(a){if(!isDirectFlashTimeoutError(a))throw a;try{await runRecoveryFlashAfterTimeout({loaded:t,firmware:e,reason:a})}catch(e){const t=new Error(`Recovery flash failed after timeout: ${e.message}`);throw t.recoveryFailed=!0,t.cause=e,t}}state.flash.directBootloaderTouched=!1,"Recovery OK"!==el.flashState.textContent&&setDirectFlashProgress(100,"Flash OK"),logLine(`DIRECT_FLASH_OK,firmware=${e.id}`)}catch(e){state.flash.directBootloaderTouched=!1;setDirectFlashProgress(0,e.recoveryFailed?"Recovery failed":isDirectFlashTimeoutError(e)?"Flash timeout":isDirectBootloaderError(e)?"Not bootloader":"Flash failed"),logLine(`ERR,direct_flash,${e.message}`)}finally{state.flash.directBusy=!1,setUiEnabled()}}async function sendCommand(e){if(!state.writer)throw new Error("Serial writer is not available.");logLine(e,"tx"),await state.writer.write((new TextEncoder).encode(`${e}\n`))}async function connectDevice(){if(!("serial"in navigator))return setStatus(el.browserStatus,"Web Serial unavailable","error"),void logLine("This browser does not support Web Serial.");try{state.port=await navigator.serial.requestPort(),await state.port.open({baudRate:115200}),state.writer=state.port.writable.getWriter(),state.reader=state.port.readable.getReader(),state.connected=!0,state.readLoopActive=!0,setUiEnabled(),readLoop(),await sleep(700),await sendCommand("PING"),await sendCommand("STATUS")}catch(e){logLine(`ERR,connect,${e.message}`),await disconnectDevice()}}async function disconnectDevice(){try{if(state.readLoopActive=!1,state.streaming=!1,state.recording=!1,state.writer){try{await sendCommand("STOP")}catch(e){logLine(`ERR,stop_on_disconnect,${e.message}`)}state.writer.releaseLock()}state.reader&&(await state.reader.cancel(),state.reader.releaseLock()),state.port&&await state.port.close()}catch(e){logLine(`ERR,disconnect,${e.message}`)}finally{state.port=null,state.reader=null,state.writer=null,state.connected=!1,setUiEnabled()}}async function readLoop(){const e=new TextDecoder;for(;state.readLoopActive&&state.reader;)try{const{value:t,done:a}=await state.reader.read();if(a)break;t&&consumeText(e.decode(t,{stream:!0}))}catch(e){state.readLoopActive&&logLine(`ERR,read,${e.message}`);break}}function consumeText(e){state.lineBuffer+=e;const t=state.lineBuffer.split(/\r?\n/);state.lineBuffer=t.pop()??"";for(const e of t){const t=e.trim();t.length>0&&handleLine(t)}}function isAdcStreamLine(e){return e.startsWith("DATA,")||e.startsWith("BUF,")||e.startsWith("FILT,")||e.startsWith("BLE_DATA,")||/^raw\s*:/i.test(e)}function handleLine(e){if(isAdcStreamLine(e)||e.startsWith("IMU,")||e.startsWith("PPG,")||logLine(e),e.startsWith("ERR,EI_ACCEL_MODEL_REQUIRED"))return state.classification.active=!1,state.classification.startPending=!1,el.classificationState.textContent="Model missing",void setUiEnabled();if(e.startsWith("ERR,EI_RUN_CLASSIFIER")||e.startsWith("ERR,EI_SIGNAL_FROM_BUFFER"))return state.classification.startPending=!1,el.classificationState.textContent="Inference error",void setUiEnabled();if(isAdcStreamLine(e)){const t=parseAdcLine(e);return void(t.length>0&&t.forEach(addSample))}if(e.startsWith("IMU,")){const t=parseImuLine(e);return void(t&&addImuSample(t))}if(e.startsWith("CLS,")){const t=parseClassificationLine(e);return void(t&&updateClassification(t))}if(e.startsWith("PPG,")){const t=parseLivePpgLine(e);return void(t&&addLivePpgSample(t))}if(e.startsWith("HR,")){const t=parseLiveHrLine(e);return void(t&&updateLiveHr(t))}if(!e.startsWith("STATUS,"))return e.startsWith("ACK,START")?(state.streaming=!0,void setUiEnabled()):e.startsWith("ACK,STOP")?(state.streaming=!1,void setUiEnabled()):e.startsWith("ACK,CLS_ON")?(state.classification.active=!0,state.classification.startPending=!1,el.classificationState.textContent="Running",void setUiEnabled()):void(e.startsWith("ACK,CLS_OFF")&&(state.classification.active=!1,state.classification.startPending=!1,el.classificationState.textContent="Idle",setUiEnabled()));parseStatus(e)}function parseAdcLine(e){if(e.startsWith("DATA,")){const t=parseDataLine(e);return t?[t]:[]}if(e.startsWith("BUF,"))return parseBufferLine(e);if(e.startsWith("FILT,")){const t=parseFilterLine(e);return t?[t]:[]}if(e.startsWith("BLE_DATA,")){const t=parseBleDataLine(e);return t?[t]:[]}if(/^raw\s*:/i.test(e)){const t=parseSerialPlotterLine(e);return t?[t]:[]}return[]}function normalizeAdcSample(e){const t=finiteOrNull(e.raw),a=finiteOrNull(e.filtered),n=finiteOrNull(e.millivolts);return{...e,seq:finiteOrNull(e.seq)??nextAdcSyntheticSeq(),micros:finiteOrNull(e.micros)??Math.round(state.receivedSamples/Math.max(1,state.settings.rateHz)*1e6),channel:finiteOrNull(e.channel)??state.settings.channel,raw:t??NaN,millivolts:n??rawToMillivolts(t),filtered:a??t??NaN,format:e.format||"DATA",formatDetail:e.formatDetail||"",valueUnit:e.valueUnit||"count",rawLabel:e.rawLabel||"Raw",filteredLabel:e.filteredLabel||"Filtered",receivedAt:Date.now()}}function parseDataLine(e){const t=e.split(",");if(t.length<6)return null;const a=Number(t[4]),n=Number(t[5]),i=Number(t[6]);return normalizeAdcSample({seq:Number(t[1]),micros:Number(t[2]),channel:Number(t[3]),raw:a,millivolts:n,filtered:Number.isFinite(i)?i:a,format:"DATA",formatDetail:t.length>=7?"stage1":"basic",valueUnit:"count",filteredLabel:t.length>=7?"Filtered":"Raw copy"})}function parseBufferLine(e){const t=e.split(",");if(t.length<4)return[];const a=Number(t[1]),n=Number(t[2]),i=Math.round(1e6/Math.max(1,state.settings.rateHz));return t.slice(3).map((e,t)=>{const s=Number(e);return Number.isFinite(s)?normalizeAdcSample({seq:Number.isFinite(a)?100*a+t:nextAdcSyntheticSeq(),micros:Number.isFinite(n)?n+t*i:void 0,channel:state.settings.channel,raw:s,millivolts:rawToMillivolts(s),filtered:s,format:"BUF",formatDetail:`buf ${Number.isFinite(a)?a:"--"}[${t}]`,valueUnit:"count",filteredLabel:"Raw copy",bufferSeq:Number.isFinite(a)?a:null,bufferIndex:t}):null}).filter(Boolean)}function parseFilterLine(e){const t=e.split(",");if(t.length<6)return null;const a=Number(t[4]),n=Number(t[5]);return normalizeAdcSample({seq:Number(t[1]),micros:Number(t[2]),channel:state.settings.channel,raw:a,millivolts:a,filtered:Number.isFinite(n)?n:a,format:"FILT",formatDetail:t[3]||state.settings.filter,valueUnit:"mV",rawLabel:"Raw mV",filteredLabel:"Filtered mV"})}function parseBleDataLine(e){const t=e.split(",");if(t.length<3)return null;const a=Number(t[1]),n=Number(t[2]);return Number.isFinite(n)?normalizeAdcSample({seq:nextAdcSyntheticSeq(),micros:Number.isFinite(a)?1e3*a:void 0,channel:state.settings.channel,raw:n,millivolts:rawToMillivolts(n),filtered:n,format:"BLE_DATA",formatDetail:"serial mirror",valueUnit:"count",filteredLabel:"Raw copy"}):null}function parseSerialPlotterLine(e){const t={};for(const a of e.split(",")){const e=a.indexOf(":");if(e<=0)continue;const n=a.slice(0,e).trim().toLowerCase(),i=Number(a.slice(e+1).trim());Number.isFinite(i)&&(t[n]=i)}if(!Number.isFinite(t.raw)&&!Number.isFinite(t.filtered))return null;const a=nextAdcSyntheticSeq(),n=Number.isFinite(t.raw)?t.raw:t.filtered,i=Number.isFinite(t.filtered)?t.filtered:n;return normalizeAdcSample({seq:a,micros:Math.round(a/Math.max(1,state.settings.rateHz)*1e6),channel:state.settings.channel,raw:n,millivolts:NaN,filtered:i,format:"PLOTTER",formatDetail:"serial plotter",valueUnit:"value"})}function parseImuLine(e){const t=e.split(",");return t.length<12?null:{seq:Number(t[1]),micros:Number(t[2]),ax:Number(t[3]),ay:Number(t[4]),az:Number(t[5]),gx:Number(t[6]),gy:Number(t[7]),gz:Number(t[8]),mx:Number(t[9]),my:Number(t[10]),mz:Number(t[11]),receivedAt:Date.now()}}function parseClassificationLine(e){const t=e.split(",");if(t.length<5)return null;const a={seq:Number(t[1]),millis:Number(t[2]),topLabel:t[3],topScore:Number(t[4]),scores:[],timing:{},anomaly:null,updatedAt:Date.now()};for(const e of t.slice(5)){const[t,n]=e.split("=");"scores"===t?a.scores=n.split("|").map(e=>{const t=e.lastIndexOf(":");return{label:t>=0?e.slice(0,t):e,value:t>=0?Number(e.slice(t+1)):0}}).filter(e=>e.label):"anomaly"===t?a.anomaly=Number(n):t&&t.endsWith("_ms")&&(a.timing[t]=Number(n))}return a}function parseKeyValueTokens(e){const t={};for(const a of e){const e=a.indexOf("=");if(e<=0)continue;const n=a.slice(0,e),i=a.slice(e+1),s=Number(i);t[n]=Number.isFinite(s)?s:i}return t}function parseLivePpgLine(e){const t=e.split(",");if(t.length<4)return null;const a=Number(t[1]),n=Number(t[2]),i=Number(t[3]),s=Number(t[4]);return Number.isFinite(a)&&Number.isFinite(i)?{seq:a,micros:Number.isFinite(n)?n:31250*a,tSec:Number.isFinite(n)?n/1e6:a/32,ppg:i,raw:i,filtered:i,source:"raw",filled:Number.isFinite(s)?s:null,receivedAt:Date.now()}:null}function parseLiveHrLine(e){const t=e.split(",");if(t.length<4)return null;const a=Number(t[3]),n=parseKeyValueTokens(t.slice(4));return{seq:Number(t[1]),millis:Number(t[2]),hrBpm:Number.isFinite(a)?a:null,quality:Number(n.quality),std:Number(n.std),acfBpm:Number(n.acf_bpm),acfScore:Number(n.acf_score),specBpm:Number(n.spec_bpm),specScore:Number(n.spec_score),window:Number(n.window),model:n.model||"",updatedAt:Date.now()}}function parseStatus(e){const t=e.split(",").slice(1);for(const e of t){const[t,a]=e.split("=");if("streaming"===t)state.streaming="1"===a;else if("classification"===t)state.classification.active="1"===a,state.classification.startPending=!1,renderClassification();else if("rate_hz"===t)state.settings.rateHz=Number(a),el.rateInput.value=a,updateAdcWindowInputFromSamples(state.settings.window),"Live ADC"===state.ppg.source&&0===state.ppg.samples.length&&el.ppgSampleRateInput&&(state.ppg.sampleRateHz=state.settings.rateHz,el.ppgSampleRateInput.value=a);else if("channel"===t)state.settings.channel=Number(a),el.channelSelect.value=a;else if("adc_bits"===t)state.settings.resolution=Number(a),el.resolutionSelect.value=a;else if("filter"===t)state.settings.dspProtocolHint="STAGE1",state.settings.filter=a,el.filterSelect.value=a,updateFilterStateText();else if("mode"===t){state.settings.dspProtocolHint="DAY2_IIR";const e="RAW"===a?"RAW":`IIR_${a}`;state.settings.filter=e,[...el.filterSelect.options].some(t=>t.value===e)&&(el.filterSelect.value=e),updateFilterStateText()}else"alpha"===t?(state.settings.alpha=Number(a),el.alphaInput.value=String(state.settings.alpha),el.alphaOutput.textContent=state.settings.alpha.toFixed(3)):"window"===t?updateAdcWindowInputFromSamples(Number(a)):"iir_order"===t||"order"===t?(state.settings.iirOrder=Number(a),el.iirOrderInput.value=a):"iir_low_hz"===t||"low"===t?(state.settings.iirLowHz=Number(a),el.iirLowInput.value=a):"iir_high_hz"===t||"high"===t?(state.settings.iirHighHz=Number(a),el.iirHighInput.value=a):"rate"===t&&(state.settings.rateHz=Number(a),el.rateInput.value=a,updateAdcWindowInputFromSamples(state.settings.window))}renderDspPanel({writeBack:!0}),setUiEnabled()}function addSample(e){e.format=e.format||"DATA",null==state.adcFormatCounts[e.format]&&(state.adcFormatCounts[e.format]=0),state.adcFormatCounts[e.format]+=1,state.samples.push(e),state.samples.length>MAX_POINTS&&state.samples.shift(),state.receivedSamples++,state.recording&&state.records.push({...e,kind:"adc",label:el.labelInput.value.trim()||"unlabeled"}),state.tableRows.unshift(e),state.tableRows.length>MAX_TABLE_ROWS&&state.tableRows.pop(),state.latestSample=e,addAdcSampleToLivePpg(e),scheduleUiRender()}function addImuSample(e){const t=processImuSample(e);state.imuSamples.push(e),state.imuProcessedSamples.push(t),state.imuSamples.length>MAX_IMU_POINTS&&(state.imuSamples.shift(),state.imuProcessedSamples.shift()),state.receivedImuSamples++,state.latestImu=e,state.latestProcessedImu=t,state.recording&&state.records.push({...e,...t,kind:"imu",label:el.labelInput.value.trim()||"unlabeled",preWindow:getInputWindowSize(),preFilter:state.settings.inputFilter,normalize:state.settings.normalizeMode}),maybeCaptureDatasetWindow(e),scheduleUiRender()}function clearLivePpgWindow(e=state.ppg.signalSource||"raw"){state.ppg.samples=[],state.ppg.analysis=null,state.ppg.liveHr=null,state.ppg.error="",state.ppg.source="Live ADC",state.ppg.signalSource=e,state.ppg.columns=["seq","micros","raw","filtered","ppg","source"],state.ppg.liveStartMicros=null,state.ppg.lastAutoAnalysisAt=0,state.ppg.lastAutoAnalysisSeq=null}function resetPpgForLiveIfNeeded(e="raw"){"Live ADC"===state.ppg.source&&state.ppg.signalSource===e||clearLivePpgWindow(e)}function getAdcPpgSignal(e){const t="RAW"!==state.settings.filter&&Number.isFinite(e.filtered);return{value:t?e.filtered:e.raw,source:t?"filtered":"raw"}}function updateLivePpgSampleRate(e=null){const t=normalizeNumber(state.settings.rateHz,state.ppg.sampleRateHz||100,1,1e3);let a=t;const n=state.ppg.samples[state.ppg.samples.length-1];if(e&&n&&Number.isFinite(e.micros)&&Number.isFinite(n.micros)){const i=(e.micros-n.micros)/1e6;i>0&&i<2&&(a=normalizeNumber(1/i,t,1,1e3))}state.ppg.sampleRateHz=a,el.ppgSampleRateInput&&Math.abs(Number(el.ppgSampleRateInput.value||0)-a)>.05&&(el.ppgSampleRateInput.value=a.toFixed(Math.abs(a-Math.round(a))<.05?0:1))}function getLivePpgRetentionCount(){const e=normalizeNumber(el.ppgDurationInput?.value,30,8,180),t=normalizeNumber(state.ppg.sampleRateHz,state.settings.rateHz||100,1,1e3);return Math.min(PPG_MAX_LIVE_POINTS,Math.max(1200,Math.ceil(t*Math.max(1.6*e,90))))}function trimLivePpgSamples(){const e=getLivePpgRetentionCount();for(;state.ppg.samples.length>e;)state.ppg.samples.shift()}function makeLivePpgSampleFromAdc(e){const t=getAdcPpgSignal(e);resetPpgForLiveIfNeeded(t.source),updateLivePpgSampleRate(e),(null==state.ppg.liveStartMicros||Number.isFinite(e.micros)&&e.micros<state.ppg.liveStartMicros)&&(state.ppg.liveStartMicros=Number.isFinite(e.micros)?e.micros:0);const a=Number.isFinite(e.micros)?(e.micros-state.ppg.liveStartMicros)/1e6:state.ppg.samples.length/Math.max(1,state.ppg.sampleRateHz||100);return{seq:e.seq,micros:e.micros,tSec:a,ppg:t.value,raw:e.raw,filtered:e.filtered,source:t.source,channel:e.channel,receivedAt:e.receivedAt}}function addAdcSampleToLivePpg(e){if(!Number.isFinite(e.raw)&&!Number.isFinite(e.filtered))return;const t=makeLivePpgSampleFromAdc(e);state.ppg.samples.push(t),trimLivePpgSamples(),maybeRunLivePpgAnalysis(t)}function addPpgSampleToAdcPlot(e){const t={seq:e.seq,micros:e.micros,channel:state.settings.channel,raw:e.ppg,millivolts:Number.isFinite(e.ppg)?e.ppg/Math.max(1,(1<<state.settings.resolution)-1)*3300:NaN,filtered:e.ppg,receivedAt:e.receivedAt,format:"PPG",formatDetail:"stage3 raw",valueUnit:"count",rawLabel:"PPG raw",filteredLabel:"PPG raw",ppgMirror:!0};t.format=t.format||"PPG",state.adcFormatCounts.PPG=(state.adcFormatCounts.PPG||0)+1,state.samples.push(t),state.samples.length>MAX_POINTS&&state.samples.shift(),state.receivedSamples++,state.latestSample=t,state.recording&&state.records.push({...t,kind:"adc",label:el.labelInput.value.trim()||"unlabeled"}),state.tableRows.unshift(t),state.tableRows.length>MAX_TABLE_ROWS&&state.tableRows.pop()}function addLivePpgSample(e){resetPpgForLiveIfNeeded(e.source||"raw"),updateLivePpgSampleRate(e),state.ppg.samples.push(e),trimLivePpgSamples(),addPpgSampleToAdcPlot(e),maybeRunLivePpgAnalysis(e),scheduleUiRender()}function updateLiveHr(e){resetPpgForLiveIfNeeded(state.ppg.signalSource||"raw"),state.ppg.liveHr=e,scheduleUiRender()}function updateClassification(e){state.classification={...state.classification,...e,active:state.classification.active},renderClassification(),"classification"===state.activeView&&drawPlot()}function getClassificationInputWindow(){
-const e=getInputWindowSize(),t=isInputPreprocessActive(),a=t?"processed":"raw",n=t?state.imuProcessedSamples:state.imuSamples,i=Math.min(n.length,e),s=Math.max(0,n.length-i),o=n.slice(s),r=o[o.length-1]||null;return{windowSize:e,sourceName:a,frames:o,available:i,first:o[0]||null,latest:r,keys:t?{ax:"pax",ay:"pay",az:"paz"}:{ax:"ax",ay:"ay",az:"az"}}}function getClassificationInputWindowText(){const e=getClassificationInputWindow(),t=e.latest&&e.first?`seq ${e.first.seq}-${e.latest.seq}`:"no IMU window",a=state.classification,n=null==a.seq?"no class result":`class seq ${a.seq}`;return`Input data window: ${e.available}/${e.windowSize} ${e.sourceName} samples - ${state.settings.inputFilter} - ${state.settings.normalizeMode} - ${t} - ${n}`}function updateClassificationInputState(){el.classificationWindowState.textContent=getClassificationInputWindowText()}function renderClassification(){const e=state.classification;el.classificationState.textContent=e.startPending?"Starting":e.active?"Running":"Idle",el.classificationTopLabel.textContent=e.topLabel||"--",el.classificationTopScore.textContent=Number.isFinite(e.topScore)?`${(100*e.topScore).toFixed(1)}%`:"--",updateClassificationInputState();const t=[...e.scores||[]].sort((e,t)=>t.value-e.value).slice(0,8);el.classificationList.replaceChildren(...t.map(e=>{const t=document.createElement("div");t.className="classification-row";const a=Math.max(0,Math.min(100,100*e.value)),n=document.createElement("span");n.className="classification-name",n.textContent=e.label;const i=document.createElement("span");i.className="classification-score",i.textContent=`${a.toFixed(1)}%`;const s=document.createElement("span");s.className="classification-bar";const o=document.createElement("span");return o.className="classification-fill",o.style.width=`${a.toFixed(1)}%`,s.append(o),t.append(n,i,s),t}))}function parseCsvLine(e){const t=[];let a="",n=!1;for(let i=0;i<e.length;i++){const s=e[i];'"'===s?n&&'"'===e[i+1]?(a+='"',i++):n=!n:","!==s||n?a+=s:(t.push(a),a="")}return t.push(a),t}function inferPpgSampleRate(e){if(e.length<2)return 32;const t=[];for(let a=1;a<Math.min(e.length,80);a++){const n=e[a].tSec-e[a-1].tSec;Number.isFinite(n)&&n>0&&t.push(n)}return 0===t.length?32:(t.sort((e,t)=>e-t),Math.max(1,Math.min(200,1/t[Math.floor(t.length/2)])))}function parseTimestampSeconds(e){const t=String(e??"").trim(),a=t.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?/);if(a){const[,e,t,n,i,s,o,r=""]=a;return Date.UTC(Number(e),Number(t)-1,Number(n),Number(i),Number(s),Number(o))/1e3+(r?Number(`0.${r}`):0)}const n=Date.parse(t);return Number.isFinite(n)?n/1e3:NaN}function parsePpgCsv(e,t="CSV"){const a=e.split(/\r?\n/).filter(e=>e.trim().length>0);if(a.length<2)throw new Error("PPG CSV has no data rows");const n=parseCsvLine(a[0]).map(e=>e.trim()),i=e=>n.findIndex(t=>t.toLowerCase()===e),s=i("time"),o=i("ppg"),r=i("hr"),l=i("activity_label")>=0?i("activity_label"):i("activity");if(o<0)throw new Error("PPG CSV must include a ppg column");const c=[];let d=null;for(let e=1;e<a.length&&c.length<PPG_MAX_PARSE_ROWS;e++){const t=parseCsvLine(a[e]),n=Number(t[o]);if(!Number.isFinite(n))continue;let i=c.length/32;if(s>=0){const e=parseTimestampSeconds(t[s]);Number.isFinite(e)&&(null==d&&(d=e),i=e-d)}c.push({tSec:i,ppg:n,hr:r>=0?Number(t[r]):NaN,activity:l>=0?t[l]:""})}if(c.length<2)throw new Error("No numeric PPG samples found");const u=inferPpgSampleRate(c);state.ppg.samples=c,state.ppg.sampleRateHz=u,state.ppg.source=t,state.ppg.signalSource="csv",state.ppg.columns=n,state.ppg.analysis=null,state.ppg.liveHr=null,state.ppg.liveStartMicros=null,state.ppg.lastAutoAnalysisAt=0,state.ppg.lastAutoAnalysisSeq=null,state.ppg.error="",el.ppgSampleRateInput&&(el.ppgSampleRateInput.value=u.toFixed(Math.abs(u-Math.round(u))<.01?0:2)),logLine(`PPG_LOAD,rows=${c.length},fs=${u.toFixed(2)},source=${t}`),renderPpgView(),setUiEnabled()}function getPpgOptions(){return{sampleRateHz:normalizeNumber(el.ppgSampleRateInput?.value,state.ppg.sampleRateHz||state.settings.rateHz||100,1,1e3),startMin:normalizeNumber(el.ppgStartInput?.value,0,0,1e4),durationSec:normalizeNumber(el.ppgDurationInput?.value,30,8,180),refractoryMs:normalizeNumber(el.ppgRefractoryInput.value,420,250,1200),threshold:normalizeNumber(el.ppgThresholdInput.value,.42,.1,.9)}}function getPpgWindow(e=getPpgOptions()){if("Live ADC"===state.ppg.source){const t=state.ppg.samples[state.ppg.samples.length-1];if(!t)return[];const a=t.tSec-e.durationSec;return state.ppg.samples.filter(e=>e.tSec>=a&&e.tSec<=t.tSec)}const t=60*e.startMin,a=e.durationSec;return state.ppg.samples.filter(e=>e.tSec>=t&&e.tSec<t+a)}function movingAverage(e,t){const a=Array(e.length).fill(0);let n=0;for(let i=0;i<e.length;i++){n+=e[i];const s=i-2*t-1;s>=0&&(n-=e[s]);const o=Math.min(i+1,2*t+1);a[i]=n/o}return a}function preprocessPpgWindow(e,t){const a=e.map(e=>e.ppg),n=Math.max(3,Math.round(1.2*t)),i=Math.max(1,Math.round(.08*t)),s=movingAverage(a,n),o=movingAverage(a.map((e,t)=>e-s[t]),i),r=o.reduce((e,t)=>e+t,0)/Math.max(1,o.length),l=o.reduce((e,t)=>e+(t-r)**2,0)/Math.max(1,o.length),c=Math.max(1e-6,Math.sqrt(l));return o.map(e=>(e-r)/c)}function convolveSame(e,t){const a=Math.floor(t.length/2);return e.map((n,i)=>{let s=0;for(let n=0;n<t.length;n++){const o=Math.max(0,Math.min(e.length-1,i+n-a));s+=e[o]*t[n]}return s})}function normalizeUnit(e){const t=Math.min(...e),a=Math.max(...e),n=Math.max(1e-6,a-t);return e.map(e=>(e-t)/n)}function runPpgCnnDetector(e,t){const a=[[-.2,-.35,-.15,.25,.75,1,.75,.25,-.15,-.35,-.2],[-.4,-.25,0,.35,.8,.35,0,-.25,-.4],[-.5,-.2,.35,.8,.35,-.2,-.5]],n=a.map(t=>convolveSame(e,t).map(e=>Math.max(0,e))),i=movingAverage(e.map((e,t)=>n.reduce((e,a)=>e+a[t],0)/n.length),Math.max(1,Math.round(.06*t)));return{kernels:a.map(e=>e.length),score:normalizeUnit(i)}}function detectPeaksFromScore(e,t,a){const n=[];let i=-1/0;for(let s=1;s<e.length-1;s++)e[s]<t||e[s]<e[s-1]||e[s]<e[s+1]||(s-i<a?n.length>0&&e[s]>e[n[n.length-1]]&&(n[n.length-1]=s,i=s):(n.push(s),i=s));return n}function computeHrvFromPeaks(e,t){const a=[];for(let n=1;n<e.length;n++){const i=(e[n]-e[n-1])/t*1e3;i>=300&&i<=2e3&&a.push(i)}if(a.length<2)return{peaks:e.length,ibiMs:a,hrBpm:NaN,meanIbiMs:NaN,rmssdMs:NaN,sdnnMs:NaN,pnn50:NaN};const n=a.reduce((e,t)=>e+t,0)/a.length,i=[];for(let e=1;e<a.length;e++)i.push(a[e]-a[e-1]);const s=Math.sqrt(i.reduce((e,t)=>e+t*t,0)/Math.max(1,i.length)),o=Math.sqrt(a.reduce((e,t)=>e+(t-n)**2,0)/Math.max(1,a.length-1)),r=i.filter(e=>Math.abs(e)>50).length/Math.max(1,i.length);return{peaks:e.length,ibiMs:a,hrBpm:6e4/n,meanIbiMs:n,rmssdMs:s,sdnnMs:o,pnn50:r}}function runPpgAnalysis(e={}){const t=getPpgOptions(),a=getPpgWindow(t);if(a.length<Math.max(10,8*t.sampleRateHz))throw new Error("Selected PPG window is too short");const n=preprocessPpgWindow(a,t.sampleRateHz),i=runPpgCnnDetector(n,t.sampleRateHz),s=Math.max(1,Math.round(t.refractoryMs/1e3*t.sampleRateHz)),o=detectPeaksFromScore(i.score,t.threshold,s),r=computeHrvFromPeaks(o,t.sampleRateHz),l=a.map(e=>e.hr).filter(Number.isFinite),c=l.length>0?l.reduce((e,t)=>e+t,0)/l.length:NaN;state.ppg.analysis={options:t,window:a,processed:n,cnn:i,peaks:o,hrv:r,referenceHr:c},state.ppg.error="",e.silent||logLine(`PPG_ANALYZE,window=${a.length},peaks=${o.length},hr=${Number.isFinite(r.hrBpm)?r.hrBpm.toFixed(1):"nan"}`),renderPpgView()}function maybeRunLivePpgAnalysis(e){if("Live ADC"!==state.ppg.source||!e)return;const t=getPpgOptions(),a=Math.max(10,Math.ceil(8*t.sampleRateHz));if(state.ppg.samples.length<a)return state.ppg.analysis=null,void(state.ppg.error="");const n=performance.now(),i=(null==state.ppg.lastAutoAnalysisSeq?1/0:Math.abs(e.seq-state.ppg.lastAutoAnalysisSeq))>=Math.max(1,Math.round(t.sampleRateHz)),s=n-state.ppg.lastAutoAnalysisAt>=PPG_LIVE_ANALYSIS_INTERVAL_MS;if(i||s)try{runPpgAnalysis({silent:!0}),state.ppg.lastAutoAnalysisAt=n,state.ppg.lastAutoAnalysisSeq=e.seq}catch(e){/too short/i.test(e.message)||(state.ppg.error=e.message)}}async function loadBundledPpgCsv(){state.ppg.loading=!0,state.ppg.error="",el.ppgStatus.textContent="Loading",setUiEnabled();try{let e=null;for(const t of PPG_SAMPLE_PATHS)try{const e=await fetch(t,{cache:"no-store"});if(!e.ok)throw new Error(`HTTP ${e.status}`);return void parsePpgCsv(await e.text(),t)}catch(t){e=t}throw e||new Error("No bundled PPG CSV path worked")}catch(e){state.ppg.error=e.message,el.ppgStatus.textContent="Load failed",logLine(`ERR,ppg_load,${e.message}`)}finally{state.ppg.loading=!1,renderPpgView(),setUiEnabled()}}async function importPpgCsv(e){const t=e.target.files?.[0];if(t){state.ppg.loading=!0,state.ppg.error="",el.ppgStatus.textContent="Loading",setUiEnabled();try{parsePpgCsv(await t.text(),t.name)}catch(e){state.ppg.error=e.message,el.ppgStatus.textContent="Load failed",logLine(`ERR,ppg_import,${e.message}`)}finally{state.ppg.loading=!1,renderPpgView(),setUiEnabled()}}}function safeMetric(e,t=1,a=""){return Number.isFinite(e)?`${e.toFixed(t)}${a}`:"--"}function renderPpgView(){const e=state.ppg.samples.length,t=state.ppg.analysis,a=state.ppg.liveHr,n="Live ADC"===state.ppg.source,i=n?`Live ADC ${state.ppg.signalSource||"raw"}`:state.ppg.source||"CSV";if(el.ppgStatus.textContent=state.ppg.loading?"Loading":state.ppg.error?state.ppg.error:t&&n?"Live HRV":t?"Analyzed":n&&e>0?"Estimating":e>0?"Ready":"No data",el.ppgSourceState.textContent=e>0?`${i} - ${e} samples`:"Waiting for ADC",el.ppgMetricState.textContent=t?`${t.peaks.length} peaks`:a&&Number.isFinite(a.hrBpm)?`${a.hrBpm.toFixed(1)} bpm`:`${e} samples`,el.ppgThresholdOutput.textContent=Number(el.ppgThresholdInput.value).toFixed(2),!t){const t=getPpgOptions(),i=Math.max(10,Math.ceil(8*t.sampleRateHz)),s=getPpgWindow(t).length;return el.ppgWindowState.textContent=n?`${Math.min(s,e)} / ${Math.max(i,Math.ceil(t.sampleRateHz*t.durationSec))} samples`:e>0?"Ready to analyze":"No window",el.ppgCnnState.textContent=n?"Waiting for window":"Idle",el.ppgMetrics.replaceChildren(metricRow("Sample Rate",`${Number(el.ppgSampleRateInput.value||state.ppg.sampleRateHz).toFixed(1)} Hz`),metricRow("Window",`${safeMetric(s,0)} / ${Math.ceil(t.sampleRateHz*t.durationSec)}`),metricRow("ADC Source",state.ppg.signalSource||"--"),metricRow("Last HR",a&&Number.isFinite(a.hrBpm)?`${a.hrBpm.toFixed(1)} bpm`:"--"),metricRow("Quality",a&&Number.isFinite(a.quality)?a.quality.toFixed(3):"--")),e>0?drawLivePpgPlot():drawEmptyAuxPlot(el.ppgCanvas,"Start ADC streaming"),void drawPpgCnnArchitecture()}const s=t.hrv;el.ppgWindowState.textContent=`${t.window.length} samples - ${t.options.durationSec.toFixed(0)} s`,el.ppgCnnState.textContent=`Conv kernels ${t.cnn.kernels.join("/")}`;const o=[metricRow("CNN HR",safeMetric(s.hrBpm,1," bpm")),metricRow("RMSSD",safeMetric(s.rmssdMs,1," ms")),metricRow("SDNN",safeMetric(s.sdnnMs,1," ms")),metricRow("pNN50",Number.isFinite(s.pnn50)?`${(100*s.pnn50).toFixed(1)}%`:"--"),metricRow("Mean IBI",safeMetric(s.meanIbiMs,1," ms")),metricRow("ADC Source",n?state.ppg.signalSource||"--":"CSV")];n||o.splice(1,0,metricRow("Reference HR",safeMetric(t.referenceHr,1," bpm"))),el.ppgMetrics.replaceChildren(...o),drawPpgSignalPlot(),drawPpgCnnScorePlot()}function drawLivePpgPlot(){const e=state.ppg.samples;if(!e.length)return void drawEmptyAuxPlot(el.ppgCanvas,"No live PPG samples");const{ctx:t,width:a,height:n}=resizeAuxCanvasToDisplaySize(el.ppgCanvas,220),i={left:48,right:18,top:18,bottom:34},s=a-i.left-i.right,o=n-i.top-i.bottom,r=e.map(e=>e.ppg),l=Math.min(...r),c=Math.max(...r),d=Math.max(1,c-l);t.clearRect(0,0,a,n),t.fillStyle="#ffffff",t.fillRect(0,0,a,n),drawGridOn(t,a,n,i,s,o),t.strokeStyle="#008c8c",t.lineWidth=1.6,t.beginPath(),r.forEach((e,a)=>{const n=i.left+s*a/Math.max(1,r.length-1),c=i.top+o-(e-l)/d*o;0===a?t.moveTo(n,c):t.lineTo(n,c)}),t.stroke();const u=state.ppg.liveHr;drawLegendOn(t,[{color:"#008c8c",label:"filtered"===state.ppg.signalSource?"Filtered ADC":"Raw ADC"},{color:"#2767c9",label:u&&Number.isFinite(u.hrBpm)?`${u.hrBpm.toFixed(1)} bpm`:"waiting HR"}],i.left+8,i.top+18)}function drawEmptyAuxPlot(e,t){const{ctx:a,width:n,height:i}=resizeAuxCanvasToDisplaySize(e,190);a.clearRect(0,0,n,i),a.fillStyle="#ffffff",a.fillRect(0,0,n,i),a.fillStyle="#637083",a.font="14px Segoe UI, Arial, sans-serif",a.fillText(t,18,34)}function drawPpgSignalPlot(){const e=state.ppg.analysis;if(!e)return void drawEmptyAuxPlot(el.ppgCanvas,"No PPG analysis");const{ctx:t,width:a,height:n}=resizeAuxCanvasToDisplaySize(el.ppgCanvas,220),i={left:48,right:18,top:18,bottom:34},s=a-i.left-i.right,o=n-i.top-i.bottom;t.clearRect(0,0,a,n),t.fillStyle="#ffffff",t.fillRect(0,0,a,n),drawGridOn(t,a,n,i,s,o);const r=e.processed,l=Math.min(-.5,...r),c=Math.max(.5,...r);t.strokeStyle="#008c8c",t.lineWidth=1.6,t.beginPath(),r.forEach((e,a)=>{const n=i.left+s*a/Math.max(1,r.length-1),d=i.top+o-(e-l)/(c-l)*o;0===a?t.moveTo(n,d):t.lineTo(n,d)}),t.stroke(),t.fillStyle="#d28a00";for(const a of e.peaks){const e=i.left+s*a/Math.max(1,r.length-1),n=r[a],d=i.top+o-(n-l)/(c-l)*o;t.beginPath(),t.arc(e,d,3.5,0,2*Math.PI),t.fill()}drawLegendOn(t,[{color:"#008c8c",label:"PPG"},{color:"#d28a00",label:"peaks"}],i.left+8,i.top+18)}function drawPpgCnnArchitecture(){const{ctx:e,width:t,height:a}=resizeAuxCanvasToDisplaySize(el.ppgCnnCanvas,180);e.clearRect(0,0,t,a),e.fillStyle="#ffffff",e.fillRect(0,0,t,a);const n=[{label:"Input",value:"PPG window",color:"#008c8c"},{label:"Conv1D",value:"3 kernels",color:"#d28a00"},{label:"ReLU + Pool",value:"score map",color:"#7b5fb2"},{label:"Peak Gate",value:"IBI",color:"#2767c9"},{label:"HRV",value:"RMSSD/SDNN",color:"#008c8c"}],i=(t-80)/Math.max(1,n.length-1),s=a/2;e.strokeStyle="#d7dee8",e.lineWidth=2,e.beginPath(),e.moveTo(40,s),e.lineTo(t-40,s),e.stroke(),n.forEach((t,a)=>{const n=40+i*a;e.fillStyle=t.color,e.beginPath(),e.arc(n,s,10,0,2*Math.PI),e.fill(),e.fillStyle="#17202a",e.font="700 12px Segoe UI, Arial, sans-serif",e.textAlign="center",e.fillText(t.label,n,s-24),e.fillStyle="#637083",e.font="11px Segoe UI, Arial, sans-serif",e.fillText(t.value,n,s+34)}),e.textAlign="start"}function drawPpgCnnScorePlot(){const e=state.ppg.analysis;if(!e)return void drawPpgCnnArchitecture();const{ctx:t,width:a,height:n}=resizeAuxCanvasToDisplaySize(el.ppgCnnCanvas,180),i={left:44,right:16,top:18,bottom:30},s=a-i.left-i.right,o=n-i.top-i.bottom;t.clearRect(0,0,a,n),t.fillStyle="#ffffff",t.fillRect(0,0,a,n),drawGridOn(t,a,n,i,s,o);const r=e.cnn.score;t.strokeStyle="#2767c9",t.lineWidth=1.8,t.beginPath(),r.forEach((e,a)=>{const n=i.left+s*a/Math.max(1,r.length-1),l=i.top+o-e*o;0===a?t.moveTo(n,l):t.lineTo(n,l)}),t.stroke();const l=i.top+o-e.options.threshold*o;t.strokeStyle="#d28a00",t.setLineDash([6,5]),t.beginPath(),t.moveTo(i.left,l),t.lineTo(a-i.right,l),t.stroke(),t.setLineDash([]),drawLegendOn(t,[{color:"#2767c9",label:"score"},{color:"#d28a00",label:"gate"}],i.left+8,i.top+18)}function setActiveView(e){state.activeView=e;for(const t of el.viewTabs)t.classList.toggle("active",t.dataset.view===e);updateViewVisibility(),drawPlot(),"classification"===e&&ensureClassificationRunningFromStream("tab")}async function ensureClassificationRunningFromStream(e="view"){if("classification"===state.activeView)if(state.connected&&state.streaming&&state.writer)if(state.classification.active||state.classification.startPending)renderClassification();else{state.classification.startPending=!0,renderClassification(),setUiEnabled();try{state.settings.rateHz=normalizeNumber(el.rateInput.value,63,1,200),applyInputPreprocess(),await sendCommand(`RATE ${state.settings.rateHz}`),await sendCommand("CLS ON"),logLine(`CLASS_AUTO_START,${e},rate=${state.settings.rateHz},window=${getInputWindowSize()}`)}catch(e){state.classification.startPending=!1,el.classificationState.textContent="Start failed",logLine(`ERR,class_auto_start,${e.message}`)}finally{setUiEnabled(),renderClassification()}}else renderClassification()}function syncSettingsPanelVisibility(){const e="adc"===state.activeView,t=["imu1d","imu2d","classification","dataset","model"].includes(state.activeView),a="classification"===state.activeView;el.adcSettingsSection.classList.toggle("is-hidden",!e),el.inputSettingsSection.classList.toggle("is-hidden",!t),el.classificationSettingsSection.classList.toggle("is-hidden",!a)}function updateViewVisibility(){const e="ppg"===state.activeView,t="dataset"===state.activeView,a="model"===state.activeView,n=!NON_CANVAS_VIEWS.has(state.activeView),i="adc"===state.activeView;el.signalCanvas.classList.toggle("is-hidden",!n),el.metricGrid.classList.toggle("is-hidden",!n),el.adcPlotControls.classList.toggle("is-hidden",!i),el.ppgView.classList.toggle("is-hidden",!e),el.datasetView.classList.toggle("is-hidden",!t),el.modelView.classList.toggle("is-hidden",!a),syncSettingsPanelVisibility(),e&&renderPpgView(),t&&renderDatasetView(),a&&renderModelView()}function scheduleUiRender(){if(state.renderPending)return;const e=performance.now()-state.lastRenderTime,t=Math.max(0,RENDER_INTERVAL_MS-e);state.renderPending=!0,setTimeout(()=>{requestAnimationFrame(flushUiRender)},t)}function flushUiRender(e){state.renderPending=!1,state.lastRenderTime=e,(state.latestSample||state.latestImu||state.classification.updatedAt)&&(updateCurrentMetrics(),updateRateMetric(e),state.latestSample&&e-state.lastTableRenderTime>=TABLE_RENDER_INTERVAL_MS&&(updateTable(),state.lastTableRenderTime=e),drawPlot(),setUiEnabled())}function updateMetrics(e){const t="mV"===e.valueUnit?"mV":(e.valueUnit,"");el.metric1Label.textContent=e.rawLabel||"Raw",el.metric2Label.textContent=e.filteredLabel||"Filtered",el.metric3Label.textContent=Number.isFinite(e.millivolts)?"Voltage":"Format",el.metric4Label.textContent="Rate",el.sampleCount.textContent=`${state.receivedSamples} samples`,el.recordCount.textContent=`${state.records.length} rows`,el.rawMetric.textContent=formatAdcMetric(e.raw,"count"===e.valueUnit?0:3,t),el.filteredMetric.textContent=formatAdcMetric(e.filtered,"count"===e.valueUnit?1:3,t),el.voltageMetric.textContent=Number.isFinite(e.millivolts)?`${e.millivolts.toFixed(1)} mV`:e.format||"--";const a=e.formatDetail?` - ${e.formatDetail}`:"",n=Number.isFinite(e.channel)?`A${e.channel}`:"ADC";el.plotMeta.textContent=`${e.format||"ADC"}${a} - ${n} - seq ${e.seq}`,el.lastTimestamp.textContent=`${e.micros} us`,updateAdcFormatState()}function updateCurrentMetrics(){"ppg"!==state.activeView?"dataset"!==state.activeView?"model"!==state.activeView?"adc"===state.activeView&&state.latestSample?updateMetrics(state.latestSample):state.activeView.startsWith("imu")&&state.latestImu?updateImuMetrics(state.latestImu):"classification"===state.activeView&&updateClassificationMetrics():renderModelView():renderDatasetView():renderPpgView()}function updateImuMetrics(e){const t=state.latestProcessedImu,a=isInputPreprocessActive()&&t?t:e,n=isInputPreprocessActive()&&t?"Proc":"Accel",i=a.pax??a.ax,s=a.pay??a.ay,o=a.paz??a.az,r=getInputUnits();el.metric1Label.textContent=`${n} X`,el.metric2Label.textContent=`${n} Y`,el.metric3Label.textContent=`${n} Z`,el.metric4Label.textContent="IMU Rate",el.sampleCount.textContent=`${state.receivedImuSamples} IMU`,el.recordCount.textContent=`${state.records.length} rows`,el.rawMetric.textContent=`${i.toFixed(3)} ${r}`,el.filteredMetric.textContent=`${s.toFixed(3)} ${r}`,el.voltageMetric.textContent=`${o.toFixed(3)} ${r}`,el.plotMeta.textContent=`IMU ${getInputWindowSize()} win - ${state.settings.inputFilter} - ${state.settings.normalizeMode} - seq ${e.seq}`,el.lastTimestamp.textContent=`${e.micros} us`}function updateClassificationMetrics(){const e=state.classification;updateClassificationInputState(),el.metric1Label.textContent="Top Label",el.metric2Label.textContent="Confidence",el.metric3Label.textContent="DSP",el.metric4Label.textContent="Classify",el.sampleCount.textContent=null==e.seq?"0 class":`${e.seq+1} class`,el.rawMetric.textContent=e.topLabel||"--",el.filteredMetric.textContent=Number.isFinite(e.topScore)?`${(100*e.topScore).toFixed(1)}%`:"--",el.voltageMetric.textContent=Number.isFinite(e.timing?.dsp_ms)?`${e.timing.dsp_ms} ms`:"--",el.rateMetric.textContent=Number.isFinite(e.timing?.classification_ms)?`${e.timing.classification_ms} ms`:"--",el.plotMeta.textContent=e.updatedAt?`Classification result - seq ${e.seq} - ${getInputWindowSize()} sample window`:`Waiting for classification - ${getInputWindowSize()} sample window`}function updateRateMetric(e=performance.now()){if("classification"===state.activeView)return;if(state.activeView.startsWith("imu")){const t=e-state.lastImuRateCheckTime;if(t<1e3)return;const a=1e3*(state.receivedImuSamples-state.lastImuRateCheckCount)/t;return el.rateMetric.textContent=`${a.toFixed(1)} Hz`,state.lastImuRateCheckCount=state.receivedImuSamples,void(state.lastImuRateCheckTime=e)}const t=e-state.lastRateCheckTime;if(t<1e3)return;const a=1e3*(state.receivedSamples-state.lastRateCheckCount)/t;el.rateMetric.textContent=`${a.toFixed(1)} Hz`,state.lastRateCheckCount=state.receivedSamples,state.lastRateCheckTime=e}function updateTable(){el.sampleTableBody.replaceChildren(...state.tableRows.slice(0,32).map(e=>{const t=document.createElement("tr");return t.innerHTML=`\n        <td>${e.seq}</td>\n        <td>${e.format||"DATA"}</td>\n        <td>${e.micros}</td>\n        <td>${Number.isFinite(e.channel)?`A${e.channel}`:"--"}</td>\n        <td>${formatNumber(e.raw,"count"===e.valueUnit?0:3)}</td>\n        <td>${formatNumber(e.millivolts,2)}</td>\n        <td>${formatNumber(e.filtered,"count"===e.valueUnit?2:3)}</td>\n      `,t}))}function drawPlot(){if("ppg"===state.activeView)return void renderPpgView();if("dataset"===state.activeView)return void renderDatasetView();if("model"===state.activeView)return void renderModelView();if("imu1d"===state.activeView)return void drawImuSeriesPlot();if("imu2d"===state.activeView)return void drawImuPlanarPlot();if("classification"===state.activeView)return void drawClassificationPlot();const{width:e,height:t}=resizeCanvasToDisplaySize(),a=e<560,n=a?{left:34,right:12,top:18,bottom:30}:{left:58,right:18,top:18,bottom:36},i=e-n.left-n.right,s=t-n.top-n.bottom;ctx.clearRect(0,0,e,t),ctx.fillStyle="#fbfcfd",ctx.fillRect(0,0,e,t),drawGrid(e,t,n,i,s),syncAdcPlotSettings();const o=getVisibleAdcSamples();if(o.length<2)return ctx.fillStyle="#637083",ctx.font="16px Segoe UI, Arial, sans-serif",void(a?(ctx.fillText("Connect and start",n.left+12,n.top+32),ctx.fillText("streaming to view ADC data",n.left+12,n.top+54)):ctx.fillText("Connect and start streaming to view ADC data",n.left+12,n.top+32));const r=getAdcPlotSeries(),l=r.flatMap(e=>o.map(t=>getAdcPlotValue(t,e.key))).filter(Number.isFinite);let c=0,d=(1<<state.settings.resolution)-1;if(el.autoScaleToggle.checked&&l.length>0){c=Math.min(...l),d=Math.max(...l);const e=Math.max(10,.12*(d-c));c-=e,d+=e}Math.abs(d-c)<1&&(d+=1,c-=1);for(const e of r)drawTrace(o,e,c,d,n,i,s);drawLegend(r,n.left+8,t-10),ctx.fillStyle="#637083",ctx.font="12px Segoe UI, Arial, sans-serif",ctx.fillText(`${d.toFixed(0)}`,12,n.top+4),ctx.fillText(`${c.toFixed(0)}`,12,t-n.bottom)}function drawGrid(e,t,a,n,i){drawGridOn(ctx,e,t,a,n,i)}function drawGridOn(e,t,a,n,i,s){e.strokeStyle="#d7dee8",e.lineWidth=1,e.beginPath();for(let a=0;a<=5;a++){const i=n.top+s*a/5;e.moveTo(n.left,i),e.lineTo(t-n.right,i)}for(let t=0;t<=8;t++){const s=n.left+i*t/8;e.moveTo(s,n.top),e.lineTo(s,a-n.bottom)}e.stroke(),e.strokeStyle="#bdc8d5",e.strokeRect(n.left,n.top,i,s)}function drawTrace(e,t,a,n,i,s,o){ctx.strokeStyle=t.color,ctx.lineWidth=t.width,ctx.beginPath();let r=!1;e.forEach((l,c)=>{const d=getAdcPlotValue(l,t.key);if(!Number.isFinite(d))return;const u=i.left+s*c/Math.max(1,e.length-1),p=(d-a)/(n-a),m=i.top+o-p*o;r?ctx.lineTo(u,m):(ctx.moveTo(u,m),r=!0)}),r&&ctx.stroke()}function drawEmptyPlot(e){const{width:t,height:a}=resizeCanvasToDisplaySize();ctx.clearRect(0,0,t,a),ctx.fillStyle="#fbfcfd",ctx.fillRect(0,0,t,a),ctx.fillStyle="#637083",ctx.font="16px Segoe UI, Arial, sans-serif",ctx.fillText(e,24,44)}function drawImuSeriesPlot(){const{raw:e,processed:t}=getVisibleImuFrames(),a=el.showRawToggle.checked,n=el.showFilteredToggle.checked,i=a&&(!n||"NONE"===state.settings.normalizeMode);if((i?e.length:0)<2&&(n?t.length:0)<2)return void drawEmptyPlot("Waiting for IMU data");const{width:s,height:o}=resizeCanvasToDisplaySize(),r=s<560?{left:38,right:14,top:18,bottom:30}:{left:58,right:18,top:18,bottom:36},l=s-r.left-r.right,c=o-r.top-r.bottom,d=[{key:"ax",color:"#008c8c",label:"ax"},{key:"ay",color:"#d28a00",label:"ay"},{key:"az",color:"#2767c9",label:"az"}],u=[...i?e.flatMap(e=>d.map(t=>e[t.key])):[],...n?t.flatMap(e=>IMU_PROCESSED_AXES.map(t=>e[t])):[]],p=Math.max(.25,...u.map(e=>Math.abs(e))),m=-p,g=p;if(ctx.clearRect(0,0,s,o),ctx.fillStyle="#fbfcfd",ctx.fillRect(0,0,s,o),drawGrid(s,o,r,l,c),i)for(const t of d)drawImuLine(e,t.key,t.color,m,g,r,l,c,1.3,.38);if(n){const e=[{key:"pax",color:"#008c8c",label:"px"},{key:"pay",color:"#d28a00",label:"py"},{key:"paz",color:"#2767c9",label:"pz"}];for(const a of e)drawImuLine(t,a.key,a.color,m,g,r,l,c,2.4,1)}drawLegend(n?[{color:"#008c8c",label:"x"},{color:"#d28a00",label:"y"},{color:"#2767c9",label:"z"}]:d,r.left+8,r.top+18)}function drawImuLine(e,t,a,n,i,s,o,r,l,c){e.length<2||(ctx.save(),ctx.globalAlpha=c,ctx.strokeStyle=a,ctx.lineWidth=l,ctx.beginPath(),e.forEach((a,l)=>{const c=s.left+o*l/Math.max(1,e.length-1),d=(a[t]-n)/(i-n),u=s.top+r-d*r;0===l?ctx.moveTo(c,u):ctx.lineTo(c,u)}),ctx.stroke(),ctx.restore())}function drawImuPlanarPlot(){function e(e,t){return e.reduce((e,a)=>e+a[t],0)/e.length}const{raw:t,processed:a}=getVisibleImuFrames(),n=el.showRawToggle.checked,i=el.showFilteredToggle.checked,s=n&&(!i||"NONE"===state.settings.normalizeMode),o=i&&a.length>=2?a:t,r=i&&a.length>=2?{ax:"pax",ay:"pay",az:"paz"}:{ax:"ax",ay:"ay",az:"az"};if((s?t.length:0)<2&&(i?a.length:0)<2)return void drawEmptyPlot("Waiting for IMU data");const{width:l,height:c}=resizeCanvasToDisplaySize();ctx.clearRect(0,0,l,c),ctx.fillStyle="#fbfcfd",ctx.fillRect(0,0,l,c);const d=[{label:"XY",xAxis:"ax",yAxis:"ay",xLabel:"x",yLabel:"y",color:"#008c8c"},{label:"YZ",xAxis:"ay",yAxis:"az",xLabel:"y",yLabel:"z",color:"#d28a00"},{label:"ZA",xAxis:"az",yAxis:"ax",xLabel:"z",yLabel:"x",color:"#2767c9"}],u=l<760?1:3,p=Math.ceil(d.length/u),m=l<760?{left:18,right:18,top:18,bottom:18}:{left:26,right:26,top:24,bottom:24},g=l<760?12:16,f=(l-m.left-m.right-g*(u-1))/u,h=(c-m.top-m.bottom-g*(p-1))/p,S=el.autoScaleToggle.checked;for(const[n,l]of d.entries()){const c=n%u,d=Math.floor(n/u),p=m.left+c*(f+g),w=m.top+d*(h+g),x={left:34,right:18,top:34,bottom:28},y=p+x.left,b=w+x.top,I=f-x.left-x.right,E=h-x.top-x.bottom,v=y+I/2,A=b+E/2,M=r[l.xAxis],C=r[l.yAxis],L=S?e(o,M):0,P=S?e(o,C):0,R=Math.max(S?.08:1,...o.flatMap(e=>[Math.abs(e[M]-L),Math.abs(e[C]-P)])),T=.44*Math.min(I,E);ctx.fillStyle="#ffffff",ctx.strokeStyle="#d7dee8",ctx.lineWidth=1,ctx.beginPath(),ctx.roundRect(p,w,f,h,6),ctx.fill(),ctx.stroke(),ctx.strokeStyle="#d7dee8",ctx.beginPath(),ctx.moveTo(y,A),ctx.lineTo(y+I,A),ctx.moveTo(v,b),ctx.lineTo(v,b+E),ctx.stroke(),ctx.strokeStyle="#bdc8d5",ctx.strokeRect(y,b,I,E),s&&drawPlanarTrace(t,l.xAxis,l.yAxis,L,P,R,T,v,A,"#14242b",1.2,.28),i&&drawPlanarTrace(a,r[l.xAxis],r[l.yAxis],L,P,R,T,v,A,l.color,2.6,1);const F=o[o.length-1],_=v+(F[M]-L)/R*T,B=A-(F[C]-P)/R*T;ctx.fillStyle=i?l.color:"#14242b",ctx.beginPath(),ctx.arc(_,B,6,0,2*Math.PI),ctx.fill(),ctx.fillStyle="#17202a",ctx.font="700 13px Segoe UI, Arial, sans-serif",ctx.fillText(l.label,p+12,w+20),ctx.fillStyle="#637083",ctx.font="12px Segoe UI, Arial, sans-serif",ctx.fillText(l.xLabel,y+I-16,A-8),ctx.fillText(l.yLabel,v+8,b+14),ctx.fillText(S?`+/-${R.toFixed(2)} ${getInputUnits()} from mean`:`+/-${R.toFixed(2)} ${getInputUnits()}`,p+42,w+20)}}function drawPlanarTrace(e,t,a,n,i,s,o,r,l,c,d,u){e.length<2||(ctx.save(),ctx.globalAlpha=u,ctx.strokeStyle=c,ctx.lineWidth=d,ctx.beginPath(),e.forEach((e,c)=>{const d=r+(e[t]-n)/s*o,u=l-(e[a]-i)/s*o;0===c?ctx.moveTo(d,u):ctx.lineTo(d,u)}),ctx.stroke(),ctx.restore())}function drawImu3dPlot(){function e(e,t,a){const n=e/m,i=t/m;return{x:.82*(n-i),y:.4*(n+i)-.92*(a/m)}}function t(e){return{x:L+(e.x-M)*A,y:P+(e.y-C)*A}}const{raw:a,processed:n}=getVisibleImuFrames(),i=el.showRawToggle.checked,s=el.showFilteredToggle.checked,o=i&&(!s||"NONE"===state.settings.normalizeMode),r=s&&n.length>=2?n:a,l=s&&n.length>=2?{ax:"pax",ay:"pay",az:"paz"}:{ax:"ax",ay:"ay",az:"az"};if((o?a.length:0)<2&&(s?n.length:0)<2)return void drawEmptyPlot("Waiting for IMU data");const{width:c,height:d}=resizeCanvasToDisplaySize(),u=el.autoScaleToggle.checked,p=u?{ax:r.reduce((e,t)=>e+t[l.ax],0)/r.length,ay:r.reduce((e,t)=>e+t[l.ay],0)/r.length,az:r.reduce((e,t)=>e+t[l.az],0)/r.length}:{ax:0,ay:0,az:0},m=Math.max(u?.08:1,...r.flatMap(e=>[Math.abs(e[l.ax]-p.ax),Math.abs(e[l.ay]-p.ay),Math.abs(e[l.az]-p.az)])),g=r.map(t=>e(t[l.ax]-p.ax,t[l.ay]-p.ay,t[l.az]-p.az)),f=e(0,0,0),h=[{end:e(m,0,0),color:"#008c8c",label:"x"},{end:e(0,m,0),color:"#d28a00",label:"y"},{end:e(0,0,m),color:"#2767c9",label:"z"}],S=[f,...h.map(e=>e.end),...g],w=Math.min(...S.map(e=>e.x)),x=Math.max(...S.map(e=>e.x)),y=Math.min(...S.map(e=>e.y)),b=Math.max(...S.map(e=>e.y)),I=c<760?{left:26,right:26,top:28,bottom:34}:{left:48,right:48,top:38,bottom:44},E=c-I.left-I.right,v=d-I.top-I.bottom,A=.84*Math.min(E/Math.max(.1,x-w),v/Math.max(.1,b-y)),M=(w+x)/2,C=(y+b)/2,L=I.left+E/2,P=I.top+v/2;ctx.clearRect(0,0,c,d),ctx.fillStyle="#fbfcfd",ctx.fillRect(0,0,c,d),ctx.strokeStyle="#d7dee8",ctx.lineWidth=1,ctx.strokeRect(I.left,I.top,E,v);const R=t(f);for(const e of h){const a=t(e.end);ctx.strokeStyle=e.color,ctx.lineWidth=2,ctx.beginPath(),ctx.moveTo(R.x,R.y),ctx.lineTo(a.x,a.y),ctx.stroke(),ctx.fillStyle=e.color,ctx.font="700 13px Segoe UI, Arial, sans-serif",ctx.fillText(e.label,a.x+6,a.y)}if(o&&s&&a.length>=2){const n=a.map(t=>e(t.ax-p.ax,t.ay-p.ay,t.az-p.az));ctx.save(),ctx.globalAlpha=.26,ctx.strokeStyle="#14242b",ctx.lineWidth=1.4,ctx.beginPath(),n.forEach((e,a)=>{const n=t(e);0===a?ctx.moveTo(n.x,n.y):ctx.lineTo(n.x,n.y)}),ctx.stroke(),ctx.restore()}ctx.strokeStyle=s?"#14242b":"#008c8c",ctx.lineWidth=3,ctx.lineJoin="round",ctx.beginPath(),g.forEach((e,a)=>{const n=t(e);0===a?ctx.moveTo(n.x,n.y):ctx.lineTo(n.x,n.y)}),ctx.stroke();const T=r[r.length-1],F=t(e(T[l.ax]-p.ax,T[l.ay]-p.ay,T[l.az]-p.az));ctx.fillStyle="#d28a00",ctx.beginPath(),ctx.arc(F.x,F.y,7,0,2*Math.PI),ctx.fill(),ctx.fillStyle="#637083",ctx.font="12px Segoe UI, Arial, sans-serif",ctx.fillText(u?`3D auto zoom: +/-${m.toFixed(2)} ${getInputUnits()} from mean`:`3D scale: +/-${m.toFixed(2)} ${getInputUnits()}`,I.left+12,I.top+20)}function drawClassificationInputWindowPlot(e,t){const a=e.frames;ctx.fillStyle="#ffffff",ctx.strokeStyle="#d7dee8",ctx.lineWidth=1,ctx.beginPath(),ctx.roundRect(t.x,t.y,t.width,t.height,6),ctx.fill(),ctx.stroke(),ctx.fillStyle="#17202a",ctx.font="700 13px Segoe UI, Arial, sans-serif",ctx.fillText("Input data window",t.x+12,t.y+20),ctx.fillStyle="#637083",ctx.font="12px Segoe UI, Arial, sans-serif";const n=e.first&&e.latest?`seq ${e.first.seq}-${e.latest.seq}`:"no IMU window";ctx.fillText(`${e.available}/${e.windowSize} ${e.sourceName} samples - ${n}`,t.x+142,t.y+20);const i=t.x+42,s=t.y+34,o=Math.max(80,t.width-58),r=Math.max(60,t.height-58);ctx.strokeStyle="#eef3f7",ctx.beginPath();for(let e=0;e<=4;e++){const t=s+r*e/4;ctx.moveTo(i,t),ctx.lineTo(i+o,t)}for(let e=0;e<=8;e++){const t=i+o*e/8;ctx.moveTo(t,s),ctx.lineTo(t,s+r)}if(ctx.stroke(),ctx.strokeStyle="#bdc8d5",ctx.strokeRect(i,s,o,r),a.length<2)return ctx.fillStyle="#637083",ctx.font="13px Segoe UI, Arial, sans-serif",void ctx.fillText("Waiting for enough IMU samples",i+12,s+30);const l=[{key:e.keys.ax,label:"x",color:"#008c8c"},{key:e.keys.ay,label:"y",color:"#d28a00"},{key:e.keys.az,label:"z",color:"#2767c9"}],c=a.flatMap(e=>l.map(t=>e[t.key])).filter(Number.isFinite),d=Math.max(.25,...c.map(e=>Math.abs(e))),u=-d,p=d;for(const e of l)ctx.strokeStyle=e.color,ctx.lineWidth=2,ctx.beginPath(),a.forEach((t,n)=>{const l=i+o*n/Math.max(1,a.length-1),c=s+r-(t[e.key]-u)/(p-u)*r;0===n?ctx.moveTo(l,c):ctx.lineTo(l,c)}),ctx.stroke();ctx.fillStyle="#637083",ctx.font="11px Segoe UI, Arial, sans-serif",ctx.fillText(`+/-${d.toFixed(2)} ${getInputUnits()}`,i+8,s+16),drawLegendOn(ctx,l,i+8,s+r-8)}function drawClassificationScoreBars(e,t){if(ctx.fillStyle="#17202a",ctx.font="700 13px Segoe UI, Arial, sans-serif",ctx.fillText("Inference scores",t.x+12,t.y+20),0===e.length)return ctx.fillStyle="#637083",ctx.font="14px Segoe UI, Arial, sans-serif",void ctx.fillText(state.classification.active?"Collecting inference window - first result takes about 2 s":"Press Start + Class or Start Class to run inference",t.x+12,t.y+52);const a={left:t.x+(t.width<680?112:170),right:t.x+t.width-20,top:t.y+32,
-bottom:t.y+t.height-10},n=Math.min(30,(a.bottom-a.top)/e.length),i=Math.max(80,a.right-a.left);ctx.font="12px Segoe UI, Arial, sans-serif",e.forEach((e,s)=>{const o=a.top+s*n,r=Math.max(0,Math.min(1,e.value));ctx.fillStyle="#637083";const l=e.label.length>22?`${e.label.slice(0,21)}...`:e.label;ctx.fillText(l,t.x+12,o+.62*n),ctx.fillStyle="#eef3f7",ctx.fillRect(a.left,o+7,i,Math.max(8,n-14)),ctx.fillStyle=0===s?"#008c8c":"#2767c9",ctx.fillRect(a.left,o+7,i*r,Math.max(8,n-14)),ctx.fillStyle="#17202a",ctx.fillText(`${(100*r).toFixed(1)}%`,a.left+8,o+.62*n)})}function drawClassificationPlot(){const e=[...state.classification.scores||[]].sort((e,t)=>t.value-e.value).slice(0,10),t=getClassificationInputWindow(),{width:a,height:n}=resizeCanvasToDisplaySize(),i=14,s=Math.max(168,Math.round(.52*n)),o=Math.max(112,n-s-i-24),r=16,l=a-32;ctx.clearRect(0,0,a,n),ctx.fillStyle="#fbfcfd",ctx.fillRect(0,0,a,n),drawClassificationInputWindowPlot(t,{x:r,y:16,width:l,height:s}),drawClassificationScoreBars(e,{x:r,y:16+s+i,width:l,height:o})}function drawLegend(e,t,a){drawLegendOn(ctx,e,t,a)}function drawLegendOn(e,t,a,n){let i=a;t.forEach(t=>{e.fillStyle=t.color,e.fillRect(i,n-9,16,3),e.fillStyle="#637083",e.font="12px Segoe UI, Arial, sans-serif",e.fillText(t.label,i+20,n-4),i+=Math.max(58,28+7*t.label.length)})}async function applyAcquisition(){state.settings.channel=normalizeNumber(el.channelSelect.value,0,0,7),state.settings.rateHz=normalizeNumber(el.rateInput.value,100,1,1e3),state.settings.resolution=normalizeNumber(el.resolutionSelect.value,12,10,12),updateAdcWindowInputFromSamples(state.settings.window),await sendCommand("STOP"),await sendCommand(`RES ${state.settings.resolution}`),await sendCommand(`CH ${state.settings.channel}`),await sendCommand(`RATE ${state.settings.rateHz}`)}async function applyFilter(){const e=syncDspSettingsFromControls({writeBack:!0}),t=resolveDspProtocol();"DAY2_IIR"===t?(await sendCommand(`RATE ${e.sampleRateHz.toFixed(1)}`),await sendCommand(`MODE ${day2IirModeName(e.mode)}`),await sendCommand(`ORDER ${e.order}`),await sendCommand(`LOW ${e.lowHz.toFixed(3)}`),await sendCommand(`HIGH ${e.highHz.toFixed(3)}`)):(await sendCommand(`FILTER ${state.settings.filter}`),await sendCommand(`ALPHA ${state.settings.alpha.toFixed(3)}`),await sendCommand(`WINDOW ${state.settings.window}`),state.settings.filter.startsWith("IIR_")&&(await sendCommand(`IIRORDER ${state.settings.iirOrder}`),await sendCommand(`IIRHIGH ${state.settings.iirHighHz.toFixed(3)}`),await sendCommand(`IIRLOW ${state.settings.iirLowHz.toFixed(3)}`))),"Live ADC"===state.ppg.source&&clearLivePpgWindow("RAW"===state.settings.filter?"raw":"filtered"),updateFilterStateText(),renderDspPanel({writeBack:!0}),logLine(`DSP_APPLY,protocol=${t},mode=${e.mode},order=${e.order},low=${e.lowHz.toFixed(3)},high=${e.highHz.toFixed(3)}`)}function applyInputPreprocess(){const e=Math.max(.01,.45*getInputSampleRateHz());state.settings.inputWindowSamples=Math.round(normalizeNumber(el.inputWindowInput.value,125,16,MAX_IMU_POINTS)),state.settings.inputFilter=el.inputFilterSelect.value,state.settings.normalizeMode=el.normalizeSelect.value,state.settings.inputAlpha=normalizeNumber(el.inputAlphaInput.value,.2,.001,1),state.settings.inputMaWindow=Math.round(normalizeNumber(el.inputMaWindowInput.value,5,1,128)),state.settings.inputIirOrder=Math.round(normalizeNumber(el.inputIirOrderInput.value,2,1,4)),state.settings.inputIirHighHz=normalizeNumber(el.inputIirHighInput.value,8,.02,e),state.settings.inputIirLowHz=Math.min(normalizeNumber(el.inputIirLowInput.value,.5,.01,e),Math.max(.01,state.settings.inputIirHighHz-.01)),el.inputWindowInput.value=String(state.settings.inputWindowSamples),el.inputAlphaInput.value=String(state.settings.inputAlpha),el.inputAlphaOutput.textContent=state.settings.inputAlpha.toFixed(3),el.inputMaWindowInput.value=String(state.settings.inputMaWindow),el.inputIirOrderInput.value=String(state.settings.inputIirOrder),el.inputIirLowInput.value=state.settings.inputIirLowHz.toFixed(2),el.inputIirHighInput.value=state.settings.inputIirHighHz.toFixed(2),el.inputState.textContent=`${state.settings.inputWindowSamples} win`,rebuildImuProcessing(),logLine(`INPUT,window=${state.settings.inputWindowSamples},filter=${state.settings.inputFilter},normalize=${state.settings.normalizeMode}`),updateCurrentMetrics(),drawPlot()}async function startStreaming(){return"classification"===state.activeView?(state.settings.rateHz=normalizeNumber(el.rateInput.value,63,1,200),applyInputPreprocess(),state.classification.startPending=!0,renderClassification(),await sendCommand(`RATE ${state.settings.rateHz}`),await sendCommand("CLS ON"),void await sendCommand("START")):"ppg"===state.activeView?(await applyAcquisition(),await applyFilter(),void await sendCommand("START")):"adc"!==state.activeView?(state.settings.rateHz=normalizeNumber(el.rateInput.value,63,1,200),applyInputPreprocess(),await sendCommand(`RATE ${state.settings.rateHz}`),void await sendCommand("START")):(await applyAcquisition(),await applyFilter(),void await sendCommand("START"))}async function stopStreaming(){"classification"===state.activeView&&await sendCommand("CLS OFF"),await sendCommand("STOP")}function clearData(){state.samples=[],state.adcFormatCounts=Object.fromEntries(ADC_FORMATS.map(e=>[e,0])),state.adcSyntheticSeq=0,state.imuSamples=[],state.imuProcessedSamples=[],state.records=[],state.tableRows=[],state.latestSample=null,state.latestImu=null,state.latestProcessedImu=null,"Live ADC"===state.ppg.source&&clearLivePpgWindow("RAW"===state.settings.filter?"raw":"filtered"),resetPreprocessState(),state.renderPending=!1,state.lastRenderTime=performance.now(),state.lastTableRenderTime=0,state.receivedSamples=0,state.receivedImuSamples=0,state.lastRateCheckCount=0,state.lastRateCheckTime=performance.now(),state.lastImuRateCheckCount=0,state.lastImuRateCheckTime=performance.now(),el.sampleCount.textContent="0 samples",el.recordCount.textContent="0 rows",el.rawMetric.textContent="--",el.filteredMetric.textContent="--",el.voltageMetric.textContent="--",el.rateMetric.textContent="--",el.plotMeta.textContent="Waiting for device data",el.lastTimestamp.textContent="No data",updateAdcFormatState(),updateTable(),drawPlot(),setUiEnabled()}function toggleRecording(){state.recording=!state.recording,setUiEnabled()}async function startClassification(){state.classification.startPending=!0,renderClassification(),setUiEnabled(),await sendCommand("CLS ON")}async function stopClassification(){state.classification.startPending=!1,state.classification.active=!1,renderClassification(),await sendCommand("CLS OFF")}function exportCsv(){const e=["label","type","format","format_detail","seq","micros","channel","raw","millivolts","filtered","ax_g","ay_g","az_g","proc_ax","proc_ay","proc_az","gyro_x_dps","gyro_y_dps","gyro_z_dps","mag_x_uT","mag_y_uT","mag_z_uT","input_window","input_filter","normalize","received_at_iso"].join(",")+"\n",t=state.records.map(e=>[csvCell(e.label),csvCell(e.kind||"adc"),csvCell(e.format||""),csvCell(e.formatDetail||""),e.seq,e.micros,"imu"===e.kind?"":`A${e.channel}`,e.raw??"",Number.isFinite(e.millivolts)?e.millivolts.toFixed(3):"",Number.isFinite(e.filtered)?e.filtered.toFixed(3):"",Number.isFinite(e.ax)?e.ax.toFixed(6):"",Number.isFinite(e.ay)?e.ay.toFixed(6):"",Number.isFinite(e.az)?e.az.toFixed(6):"",Number.isFinite(e.pax)?e.pax.toFixed(6):"",Number.isFinite(e.pay)?e.pay.toFixed(6):"",Number.isFinite(e.paz)?e.paz.toFixed(6):"",Number.isFinite(e.gx)?e.gx.toFixed(6):"",Number.isFinite(e.gy)?e.gy.toFixed(6):"",Number.isFinite(e.gz)?e.gz.toFixed(6):"",Number.isFinite(e.mx)?e.mx.toFixed(6):"",Number.isFinite(e.my)?e.my.toFixed(6):"",Number.isFinite(e.mz)?e.mz.toFixed(6):"",e.preWindow??"",csvCell(e.preFilter??""),csvCell(e.normalize??""),new Date(e.receivedAt).toISOString()].join(",")),a=new Blob([e,t.join("\n"),"\n"],{type:"text/csv;charset=utf-8"}),n=URL.createObjectURL(a),i=document.createElement("a"),s=(new Date).toISOString().replace(/[:.]/g,"-");i.href=n,i.download=`keti_lab_samples_${s}.csv`,i.click(),URL.revokeObjectURL(n)}function csvCell(e){const t=String(e??"");return/[",\n]/.test(t)?`"${t.replace(/"/g,'""')}"`:t}function sleep(e){return new Promise(t=>setTimeout(t,e))}function bindEvents(){el.connectButton.addEventListener("click",connectDevice),el.disconnectButton.addEventListener("click",disconnectDevice),el.startButton.addEventListener("click",startStreaming),el.stopButton.addEventListener("click",stopStreaming),el.applyAcquisitionButton.addEventListener("click",applyAcquisition),el.applyFilterButton.addEventListener("click",applyFilter),el.applyInputButton.addEventListener("click",applyInputPreprocess),el.datasetCaptureButton.addEventListener("click",toggleDatasetCapture),el.datasetCaptureOneButton.addEventListener("click",()=>captureDatasetWindow("manual")),el.datasetExportJsonButton.addEventListener("click",exportDatasetJson),el.datasetExportCsvButton.addEventListener("click",exportDatasetCsv),el.datasetClearButton.addEventListener("click",clearDataset),el.datasetImportInput.addEventListener("change",importDatasetJson),el.ppgLoadSampleButton&&el.ppgLoadSampleButton.addEventListener("click",loadBundledPpgCsv),el.ppgAnalyzeButton&&el.ppgAnalyzeButton.addEventListener("click",()=>{try{runPpgAnalysis()}catch(e){state.ppg.error=e.message,el.ppgStatus.textContent="Analyze failed",logLine(`ERR,ppg_analyze,${e.message}`),renderPpgView()}finally{setUiEnabled()}}),el.ppgFileInput&&el.ppgFileInput.addEventListener("change",importPpgCsv),[el.ppgSampleRateInput,el.ppgStartInput,el.ppgDurationInput,el.ppgRefractoryInput].filter(Boolean).forEach(e=>{e.addEventListener("change",()=>{if(state.ppg.samples.length>0)try{runPpgAnalysis({silent:"Live ADC"===state.ppg.source})}catch(e){state.ppg.analysis=null,state.ppg.error=e.message,el.ppgStatus.textContent="Analyze failed",logLine(`ERR,ppg_analyze,${e.message}`),renderPpgView()}else renderPpgView();setUiEnabled()})}),el.ppgThresholdInput.addEventListener("input",()=>{el.ppgThresholdOutput.textContent=Number(el.ppgThresholdInput.value).toFixed(2)}),el.ppgThresholdInput.addEventListener("change",()=>{if(state.ppg.samples.length>0)try{runPpgAnalysis({silent:"Live ADC"===state.ppg.source})}catch(e){state.ppg.analysis=null,state.ppg.error=e.message,el.ppgStatus.textContent="Analyze failed",logLine(`ERR,ppg_analyze,${e.message}`),renderPpgView()}setUiEnabled()}),[el.datasetWindowInput,el.datasetStrideInput,el.datasetFeatureSelect,el.datasetSourceSelect].forEach(e=>{e.addEventListener("input",()=>{renderDatasetView(),renderModelView(),setUiEnabled()}),e.addEventListener("change",()=>{renderDatasetView(),renderModelView(),setUiEnabled()})}),[el.hiddenLayerInput,el.neuronInput].forEach(e=>{e.addEventListener("input",renderModelView),e.addEventListener("change",renderModelView)}),el.trainModelButton.addEventListener("click",trainBrowserModel),el.exportModelJsonButton.addEventListener("click",exportModelJson),el.exportCArrayButton.addEventListener("click",exportCArray),el.pingButton.addEventListener("click",()=>sendCommand("PING")),el.classStartButton.addEventListener("click",startClassification),el.classStopButton.addEventListener("click",stopClassification),el.recordButton.addEventListener("click",toggleRecording),el.clearButton.addEventListener("click",clearData),el.exportButton.addEventListener("click",exportCsv),el.flashButton.addEventListener("click",flashFirmware),el.bootloaderButton.addEventListener("click",enterBootloaderDirect),el.showRawToggle.addEventListener("change",drawPlot),el.showFilteredToggle.addEventListener("change",drawPlot),el.autoScaleToggle.addEventListener("change",drawPlot),el.adcFormatSelect.addEventListener("change",()=>{syncAdcPlotSettings(),updateCurrentMetrics(),drawPlot()}),el.adcPlotModeSelect.addEventListener("change",()=>{syncAdcPlotSettings(),drawPlot()}),[el.filterSelect,el.dspProtocolSelect,el.alphaInput,el.windowInput,el.iirOrderInput,el.iirLowInput,el.iirHighInput,el.rateInput].filter(Boolean).forEach(e=>{const t=()=>{el.alphaOutput.textContent=Number(el.alphaInput.value).toFixed(3),renderDspPanel()};e.addEventListener("input",t),e.addEventListener("change",()=>renderDspPanel({writeBack:!0}))});for(const e of el.viewTabs)e.addEventListener("click",()=>setActiveView(e.dataset.view));window.addEventListener("resize",drawPlot),el.alphaInput.addEventListener("input",()=>{el.alphaOutput.textContent=Number(el.alphaInput.value).toFixed(3),renderDspPanel()}),el.inputAlphaInput.addEventListener("input",()=>{el.inputAlphaOutput.textContent=Number(el.inputAlphaInput.value).toFixed(3)}),el.pruningInput.addEventListener("input",()=>{el.pruningOutput.textContent=`${(100*Number(el.pruningInput.value)).toFixed(0)}%`})}function init(){"serial"in navigator?setStatus(el.browserStatus,"Web Serial ready",""):setStatus(el.browserStatus,"Web Serial unavailable","error"),populateFirmwareSelect(DEFAULT_PREBUILT_FIRMWARES),bindEvents(),updateAdcWindowInputFromSamples(state.settings.window),syncAdcPlotSettings(),renderDspPanel({writeBack:!0}),applyInputPreprocess(),updateViewVisibility(),renderDatasetView(),renderModelView(),setUiEnabled(),renderClassification(),drawPlot(),loadDirectFirmwareManifest()}const MAX_POINTS=900,MAX_IMU_POINTS=900,MAX_TABLE_ROWS=80,RENDER_INTERVAL_MS=33,TABLE_RENDER_INTERVAL_MS=150,IMU_ACCEL_AXES=["ax","ay","az"],IMU_PROCESSED_AXES=["pax","pay","paz"],IMU_FILTERED_AXES=["fax","fay","faz"],AXIS_COLORS={ax:"#008c8c",ay:"#d28a00",az:"#2767c9"},BOOTLOADER_REENUMERATE_WAIT_MS=6500,BOOTLOADER_POLL_INTERVAL_MS=250,DIRECT_FLASH_STALL_TIMEOUT_MS=15e3,DIRECT_FLASH_TOTAL_TIMEOUT_MS=18e4,DIRECT_FLASH_CLOSE_TIMEOUT_MS=2500,DIRECT_FLASH_SEPARATE_ERASE=!0,DIRECT_FLASH_POST_ERASE_SETTLE_MS=1400,PPG_SAMPLE_PATHS=["../ppg_dalia_subject1_acc_ppg_activity_temp.csv","ppg_dalia_subject1_acc_ppg_activity_temp.csv"],PPG_MAX_PARSE_ROWS=24e4,PPG_MAX_LIVE_POINTS=3e4,PPG_LIVE_ANALYSIS_INTERVAL_MS=1e3,NON_CANVAS_VIEWS=new Set(["dataset","model","ppg"]),ADC_FORMAT_LABELS={ALL:"All ADC",DATA:"DATA",BUF:"BUF",FILT:"FILT",PLOTTER:"raw:/filtered:",BLE_DATA:"BLE_DATA",PPG:"PPG mirror"},ADC_FORMATS=["DATA","BUF","FILT","PLOTTER","BLE_DATA","PPG"],ADC_PLOT_SERIES={raw:{label:"Raw",color:"#008c8c",width:1.8},filtered:{label:"Filtered",color:"#d28a00",width:2.4},millivolts:{label:"mV",color:"#2767c9",width:2.1},delta:{label:"Filtered - Raw",color:"#c83232",width:2.1}},DEFAULT_PREBUILT_FIRMWARES=[{id:"stage1_lab_console",version:"0.1.1",board:"Arduino Nano 33 BLE Rev2",fqbn:"arduino:mbed_nano:nano33ble",file:"stage1_lab_console_v0.1.1.bin",size_bytes:99552,sha256:"43756B93E6A3BC2433C7C82BCB03E500ABC7BFEF0ED6415066342FFBD8EBED20"},{id:"stage2_imu_console",version:"0.2.0",board:"Arduino Nano 33 BLE Rev2",fqbn:"arduino:mbed_nano:nano33ble",file:"stage2_imu_console_v0.2.0.bin",size_bytes:118336,sha256:"FA30571E888C86132D9049384BC2C6B793D880B2158355C5F4E9FDDEAE5B40B8"},{id:"stage2_imu_ei_motion",version:"0.3.0",board:"Arduino Nano 33 BLE Rev2",fqbn:"arduino:mbed_nano:nano33ble",file:"stage2_imu_ei_motion_v0.3.0.bin",size_bytes:195984,sha256:"8481314E5B89B1A23C39F551AF75A1FADDF22EF0B35E98FBD9E07B14AE5EF3E8"},{id:"stage3_ppg_hr_adc",version:"0.4.1",board:"Arduino Nano 33 BLE Rev2",fqbn:"arduino:mbed_nano:nano33ble",file:"stage3_ppg_hr_adc_v0.4.1.bin",size_bytes:98680,sha256:"7E7E8449748D2EDAE19F050916648603028BBBE028AD2AC51A21B17E7E8A8014"}],DIRECT_MANIFEST_PATHS=["firmware/prebuilt/manifest.json","../firmware/prebuilt/manifest.json"],state={port:null,reader:null,writer:null,readLoopActive:!1,connected:!1,streaming:!1,recording:!1,activeView:"adc",samples:[],adcFormatCounts:Object.fromEntries(ADC_FORMATS.map(e=>[e,0])),adcSyntheticSeq:0,imuSamples:[],imuProcessedSamples:[],records:[],tableRows:[],latestSample:null,latestImu:null,latestProcessedImu:null,dataset:{examples:[],captureActive:!1,nextId:1,lastCaptureSeq:null},model:{trained:null,labels:[],inputSize:0,metrics:null,trainingLog:[]},classification:{active:!1,startPending:!1,seq:null,topLabel:"--",topScore:null,scores:[],timing:{},anomaly:null,updatedAt:null},ppg:{samples:[],sampleRateHz:100,source:"",signalSource:"",columns:[],analysis:null,liveHr:null,liveStartMicros:null,lastAutoAnalysisAt:0,lastAutoAnalysisSeq:null,loading:!1,error:""},renderPending:!1,lastRenderTime:0,lastTableRenderTime:0,lastRateCheckTime:performance.now(),lastRateCheckCount:0,receivedSamples:0,receivedImuSamples:0,lastImuRateCheckTime:performance.now(),lastImuRateCheckCount:0,lineBuffer:"",settings:{rateHz:100,channel:0,resolution:12,filter:"RAW",adcFormat:"ALL",adcPlotMode:"RAW_FILTERED",dspProtocol:"AUTO",dspProtocolHint:"",alpha:.2,window:8,windowSec:.08,iirOrder:2,iirLowHz:1,iirHighHz:10,inputWindowSamples:125,inputFilter:"NONE",inputAlpha:.2,inputMaWindow:5,inputIirOrder:2,inputIirLowHz:.5,inputIirHighHz:8,normalizeMode:"NONE"},preprocess:createPreprocessState(),flash:{directFirmwares:DEFAULT_PREBUILT_FIRMWARES,directBasePath:"firmware/prebuilt/",directBusy:!1,directBootloaderTouched:!1}},el={browserStatus:document.getElementById("browserStatus"),portStatus:document.getElementById("portStatus"),streamStatus:document.getElementById("streamStatus"),sampleCount:document.getElementById("sampleCount"),recordCount:document.getElementById("recordCount"),connectButton:document.getElementById("connectButton"),disconnectButton:document.getElementById("disconnectButton"),startButton:document.getElementById("startButton"),stopButton:document.getElementById("stopButton"),applyAcquisitionButton:document.getElementById("applyAcquisitionButton"),applyFilterButton:document.getElementById("applyFilterButton"),applyInputButton:document.getElementById("applyInputButton"),pingButton:document.getElementById("pingButton"),recordButton:document.getElementById("recordButton"),clearButton:document.getElementById("clearButton"),exportButton:document.getElementById("exportButton"),firmwareSelect:document.getElementById("firmwareSelect"),flashButton:document.getElementById("flashButton"),flashState:document.getElementById("flashState"),bootloaderButton:document.getElementById("bootloaderButton"),flashProgress:document.getElementById("flashProgress"),channelSelect:document.getElementById("channelSelect"),rateInput:document.getElementById("rateInput"),resolutionSelect:document.getElementById("resolutionSelect"),filterSelect:document.getElementById("filterSelect"),dspProtocolSelect:document.getElementById("dspProtocolSelect"),alphaInput:document.getElementById("alphaInput"),alphaOutput:document.getElementById("alphaOutput"),windowInput:document.getElementById("windowInput"),iirOrderInput:document.getElementById("iirOrderInput"),iirLowInput:document.getElementById("iirLowInput"),iirHighInput:document.getElementById("iirHighInput"),adcSettingsSection:document.getElementById("adcSettingsSection"),dspEquationMode:document.getElementById("dspEquationMode"),dspTransferFunction:document.getElementById("dspTransferFunction"),dspSectionEquation:document.getElementById("dspSectionEquation"),dspCoefficientGrid:document.getElementById("dspCoefficientGrid"),dspNyquistState:document.getElementById("dspNyquistState"),iirResponseCanvas:document.getElementById("iirResponseCanvas"),inputSettingsSection:document.getElementById("inputSettingsSection"),classificationSettingsSection:document.getElementById("classificationSettingsSection"),deviceLogSection:document.getElementById("deviceLogSection"),inputState:document.getElementById("inputState"),inputWindowInput:document.getElementById("inputWindowInput"),inputFilterSelect:document.getElementById("inputFilterSelect"),normalizeSelect:document.getElementById("normalizeSelect"),inputAlphaInput:document.getElementById("inputAlphaInput"),inputAlphaOutput:document.getElementById("inputAlphaOutput"),inputMaWindowInput:document.getElementById("inputMaWindowInput"),inputIirOrderInput:document.getElementById("inputIirOrderInput"),inputIirLowInput:document.getElementById("inputIirLowInput"),inputIirHighInput:document.getElementById("inputIirHighInput"),labelInput:document.getElementById("labelInput"),showRawToggle:document.getElementById("showRawToggle"),showFilteredToggle:document.getElementById("showFilteredToggle"),autoScaleToggle:document.getElementById("autoScaleToggle"),adcPlotControls:document.getElementById("adcPlotControls"),adcFormatSelect:document.getElementById("adcFormatSelect"),adcPlotModeSelect:document.getElementById("adcPlotModeSelect"),adcFormatState:document.getElementById("adcFormatState"),signalCanvas:document.getElementById("signalCanvas"),metricGrid:document.getElementById("metricGrid"),ppgView:document.getElementById("ppgView"),ppgStatus:document.getElementById("ppgStatus"),ppgSourceState:document.getElementById("ppgSourceState"),ppgMetricState:document.getElementById("ppgMetricState"),ppgWindowState:document.getElementById("ppgWindowState"),ppgCnnState:document.getElementById("ppgCnnState"),ppgFileInput:document.getElementById("ppgFileInput"),ppgLoadSampleButton:document.getElementById("ppgLoadSampleButton"),ppgAnalyzeButton:document.getElementById("ppgAnalyzeButton"),ppgSampleRateInput:document.getElementById("ppgSampleRateInput"),ppgStartInput:document.getElementById("ppgStartInput"),ppgDurationInput:document.getElementById("ppgDurationInput"),ppgRefractoryInput:document.getElementById("ppgRefractoryInput"),ppgThresholdInput:document.getElementById("ppgThresholdInput"),ppgThresholdOutput:document.getElementById("ppgThresholdOutput"),ppgMetrics:document.getElementById("ppgMetrics"),ppgCanvas:document.getElementById("ppgCanvas"),ppgCnnCanvas:document.getElementById("ppgCnnCanvas"),datasetView:document.getElementById("datasetView"),modelView:document.getElementById("modelView"),plotMeta:document.getElementById("plotMeta"),metric1Label:document.getElementById("metric1Label"),metric2Label:document.getElementById("metric2Label"),metric3Label:document.getElementById("metric3Label"),metric4Label:document.getElementById("metric4Label"),rawMetric:document.getElementById("rawMetric"),filteredMetric:document.getElementById("filteredMetric"),voltageMetric:document.getElementById("voltageMetric"),rateMetric:document.getElementById("rateMetric"),filterState:document.getElementById("filterState"),viewTabs:[...document.querySelectorAll(".view-tab")],classStartButton:document.getElementById("classStartButton"),classStopButton:document.getElementById("classStopButton"),classificationState:document.getElementById("classificationState"),classificationTopLabel:document.getElementById("classificationTopLabel"),classificationTopScore:document.getElementById("classificationTopScore"),classificationWindowState:document.getElementById("classificationWindowState"),classificationList:document.getElementById("classificationList"),logOutput:document.getElementById("logOutput"),sampleTableBody:document.getElementById("sampleTableBody"),lastTimestamp:document.getElementById("lastTimestamp"),datasetSummary:document.getElementById("datasetSummary"),datasetCaptureState:document.getElementById("datasetCaptureState"),datasetLabelInput:document.getElementById("datasetLabelInput"),datasetWindowInput:document.getElementById("datasetWindowInput"),datasetStrideInput:document.getElementById("datasetStrideInput"),datasetFeatureSelect:document.getElementById("datasetFeatureSelect"),datasetSourceSelect:document.getElementById("datasetSourceSelect"),datasetCaptureButton:document.getElementById("datasetCaptureButton"),datasetCaptureOneButton:document.getElementById("datasetCaptureOneButton"),datasetExportJsonButton:document.getElementById("datasetExportJsonButton"),datasetExportCsvButton:document.getElementById("datasetExportCsvButton"),datasetClearButton:document.getElementById("datasetClearButton"),datasetImportInput:document.getElementById("datasetImportInput"),datasetFeatureState:document.getElementById("datasetFeatureState"),datasetSizeState:document.getElementById("datasetSizeState"),datasetPreviewState:document.getElementById("datasetPreviewState"),datasetPreviewCanvas:document.getElementById("datasetPreviewCanvas"),datasetLabelList:document.getElementById("datasetLabelList"),datasetTableBody:document.getElementById("datasetTableBody"),modelStatus:document.getElementById("modelStatus"),modelShapeState:document.getElementById("modelShapeState"),modelArchitectureCanvas:document.getElementById("modelArchitectureCanvas"),hiddenLayerInput:document.getElementById("hiddenLayerInput"),neuronInput:document.getElementById("neuronInput"),activationSelect:document.getElementById("activationSelect"),learningRateInput:document.getElementById("learningRateInput"),epochInput:document.getElementById("epochInput"),pruningInput:document.getElementById("pruningInput"),pruningOutput:document.getElementById("pruningOutput"),quantizeToggle:document.getElementById("quantizeToggle"),trainModelButton:document.getElementById("trainModelButton"),exportModelJsonButton:document.getElementById("exportModelJsonButton"),exportCArrayButton:document.getElementById("exportCArrayButton"),modelMetricState:document.getElementById("modelMetricState"),modelMetrics:document.getElementById("modelMetrics"),modelLog:document.getElementById("modelLog")},ctx=el.signalCanvas.getContext("2d");init();
+const MAX_POINTS = 900;
+const MAX_IMU_POINTS = 900;
+const MAX_TABLE_ROWS = 80;
+const RENDER_INTERVAL_MS = 33;
+const TABLE_RENDER_INTERVAL_MS = 150;
+const IMU_ACCEL_AXES = ["ax", "ay", "az"];
+const IMU_PROCESSED_AXES = ["pax", "pay", "paz"];
+const IMU_FILTERED_AXES = ["fax", "fay", "faz"];
+const AXIS_COLORS = {
+  ax: "#008c8c",
+  ay: "#d28a00",
+  az: "#2767c9"
+};
+const BOOTLOADER_REENUMERATE_WAIT_MS = 6500;
+const BOOTLOADER_POLL_INTERVAL_MS = 250;
+const DIRECT_FLASH_STALL_TIMEOUT_MS = 15000;
+const DIRECT_FLASH_TOTAL_TIMEOUT_MS = 180000;
+const DIRECT_FLASH_CLOSE_TIMEOUT_MS = 2500;
+const DIRECT_FLASH_SEPARATE_ERASE = true;
+const DIRECT_FLASH_POST_ERASE_SETTLE_MS = 1400;
+const PPG_SAMPLE_PATHS = [
+  "../ppg_dalia_subject1_acc_ppg_activity_temp.csv",
+  "ppg_dalia_subject1_acc_ppg_activity_temp.csv"
+];
+const PPG_MAX_PARSE_ROWS = 240000;
+const PPG_MAX_LIVE_POINTS = 30000;
+const PPG_LIVE_ANALYSIS_INTERVAL_MS = 1000;
+const NON_CANVAS_VIEWS = new Set(["dataset", "model", "ppg"]);
+const ADC_FORMAT_LABELS = {
+  ALL: "All ADC",
+  DATA: "DATA",
+  BUF: "BUF",
+  FILT: "FILT",
+  PLOTTER: "raw:/filtered:",
+  BLE_DATA: "BLE_DATA",
+  PPG: "PPG mirror"
+};
+const ADC_FORMATS = ["DATA", "BUF", "FILT", "PLOTTER", "BLE_DATA", "PPG"];
+const ADC_PLOT_SERIES = {
+  raw: { label: "Raw", color: "#008c8c", width: 1.8 },
+  filtered: { label: "Filtered", color: "#d28a00", width: 2.4 },
+  millivolts: { label: "mV", color: "#2767c9", width: 2.1 },
+  delta: { label: "Filtered - Raw", color: "#c83232", width: 2.1 },
+  customY: { label: "Custom Y", color: "#008c8c", width: 2.2 },
+  customY2: { label: "Custom Y2", color: "#d28a00", width: 1.8 }
+};
+const MAX_DEVICE_LOG_ROWS = 90;
+const MAX_ADC_COLUMNS = 12;
+const DEVICE_LOG_RENDER_INTERVAL_MS = 150;
+const ADC_COLUMN_TYPES = [
+  ["IGNORE", "Ignore"],
+  ["LABEL", "Label / tag"],
+  ["SEQ", "Sequence"],
+  ["MICROS", "Time us"],
+  ["MILLIS", "Time ms"],
+  ["CHANNEL", "ADC channel"],
+  ["RAW", "Raw"],
+  ["MILLIVOLTS", "Voltage mV"],
+  ["FILTERED", "Filtered"],
+  ["CUSTOM_X", "Custom X"],
+  ["CUSTOM_Y", "Custom Y"],
+  ["CUSTOM_Y2", "Custom Y2"]
+];
+const DEFAULT_PREBUILT_FIRMWARES = [
+  {
+    id: "stage1_lab_console",
+    version: "0.1.1",
+    board: "Arduino Nano 33 BLE Rev2",
+    fqbn: "arduino:mbed_nano:nano33ble",
+    file: "stage1_lab_console_v0.1.1.bin",
+    size_bytes: 99552,
+    sha256: "43756B93E6A3BC2433C7C82BCB03E500ABC7BFEF0ED6415066342FFBD8EBED20"
+  },
+  {
+    id: "stage2_imu_console",
+    version: "0.2.0",
+    board: "Arduino Nano 33 BLE Rev2",
+    fqbn: "arduino:mbed_nano:nano33ble",
+    file: "stage2_imu_console_v0.2.0.bin",
+    size_bytes: 118336,
+    sha256: "FA30571E888C86132D9049384BC2C6B793D880B2158355C5F4E9FDDEAE5B40B8"
+  },
+  {
+    id: "stage2_imu_ei_motion",
+    version: "0.3.0",
+    board: "Arduino Nano 33 BLE Rev2",
+    fqbn: "arduino:mbed_nano:nano33ble",
+    file: "stage2_imu_ei_motion_v0.3.0.bin",
+    size_bytes: 195984,
+    sha256: "8481314E5B89B1A23C39F551AF75A1FADDF22EF0B35E98FBD9E07B14AE5EF3E8"
+  },
+  {
+    id: "stage3_ppg_hr_adc",
+    version: "0.4.1",
+    board: "Arduino Nano 33 BLE Rev2",
+    fqbn: "arduino:mbed_nano:nano33ble",
+    file: "stage3_ppg_hr_adc_v0.4.1.bin",
+    size_bytes: 98680,
+    sha256: "7E7E8449748D2EDAE19F050916648603028BBBE028AD2AC51A21B17E7E8A8014"
+  }
+];
+const DIRECT_MANIFEST_PATHS = [
+  "firmware/prebuilt/manifest.json",
+  "../firmware/prebuilt/manifest.json"
+];
+
+const state = {
+  port: null,
+  reader: null,
+  writer: null,
+  readLoopActive: false,
+  connected: false,
+  streaming: false,
+  recording: false,
+  activeView: "adc",
+  samples: [],
+  adcFormatCounts: Object.fromEntries(ADC_FORMATS.map((format) => [format, 0])),
+  adcSyntheticSeq: 0,
+  imuSamples: [],
+  imuProcessedSamples: [],
+  records: [],
+  tableRows: [],
+  latestSample: null,
+  latestImu: null,
+  latestProcessedImu: null,
+  dataset: {
+    examples: [],
+    captureActive: false,
+    nextId: 1,
+    lastCaptureSeq: null
+  },
+  model: {
+    trained: null,
+    labels: [],
+    inputSize: 0,
+    metrics: null,
+    trainingLog: []
+  },
+  classification: {
+    active: false,
+    startPending: false,
+    seq: null,
+    topLabel: "--",
+    topScore: null,
+    scores: [],
+    timing: {},
+    anomaly: null,
+    updatedAt: null
+  },
+  ppg: {
+    samples: [],
+    sampleRateHz: 100,
+    source: "",
+    signalSource: "",
+    columns: [],
+    analysis: null,
+    liveHr: null,
+    liveStartMicros: null,
+    lastAutoAnalysisAt: 0,
+    lastAutoAnalysisSeq: null,
+    loading: false,
+    error: ""
+  },
+  renderPending: false,
+  lastRenderTime: 0,
+  lastTableRenderTime: 0,
+  lastRateCheckTime: performance.now(),
+  lastRateCheckCount: 0,
+  receivedSamples: 0,
+  receivedImuSamples: 0,
+  lastImuRateCheckTime: performance.now(),
+  lastImuRateCheckCount: 0,
+  lineBuffer: "",
+  deviceLog: {
+    rows: [],
+    renderPending: false,
+    lastRenderTime: 0
+  },
+  lineInspector: {
+    delimiter: "AUTO",
+    customDelimiter: ",",
+    xAxis: "INDEX",
+    yAxis: "DEFAULT",
+    columnTypes: [],
+    latest: null
+  },
+  settings: {
+    rateHz: 100,
+    channel: 0,
+    resolution: 12,
+    filter: "RAW",
+    adcFormat: "ALL",
+    adcPlotMode: "RAW_FILTERED",
+    dspProtocol: "AUTO",
+    dspProtocolHint: "",
+    alpha: 0.2,
+    window: 8,
+    windowSec: 0.08,
+    iirOrder: 2,
+    iirLowHz: 1.0,
+    iirHighHz: 10.0,
+    inputWindowSamples: 125,
+    inputFilter: "NONE",
+    inputAlpha: 0.2,
+    inputMaWindow: 5,
+    inputIirOrder: 2,
+    inputIirLowHz: 0.5,
+    inputIirHighHz: 8.0,
+    normalizeMode: "NONE"
+  },
+  preprocess: createPreprocessState(),
+  flash: {
+    directFirmwares: DEFAULT_PREBUILT_FIRMWARES,
+    directBasePath: "firmware/prebuilt/",
+    directBusy: false,
+    directBootloaderTouched: false
+  }
+};
+
+const el = {
+  browserStatus: document.getElementById("browserStatus"),
+  portStatus: document.getElementById("portStatus"),
+  streamStatus: document.getElementById("streamStatus"),
+  sampleCount: document.getElementById("sampleCount"),
+  recordCount: document.getElementById("recordCount"),
+  connectButton: document.getElementById("connectButton"),
+  disconnectButton: document.getElementById("disconnectButton"),
+  startButton: document.getElementById("startButton"),
+  stopButton: document.getElementById("stopButton"),
+  applyAcquisitionButton: document.getElementById("applyAcquisitionButton"),
+  applyFilterButton: document.getElementById("applyFilterButton"),
+  applyInputButton: document.getElementById("applyInputButton"),
+  pingButton: document.getElementById("pingButton"),
+  recordButton: document.getElementById("recordButton"),
+  clearButton: document.getElementById("clearButton"),
+  exportButton: document.getElementById("exportButton"),
+  firmwareSelect: document.getElementById("firmwareSelect"),
+  flashButton: document.getElementById("flashButton"),
+  flashState: document.getElementById("flashState"),
+  bootloaderButton: document.getElementById("bootloaderButton"),
+  flashProgress: document.getElementById("flashProgress"),
+  channelSelect: document.getElementById("channelSelect"),
+  rateInput: document.getElementById("rateInput"),
+  resolutionSelect: document.getElementById("resolutionSelect"),
+  filterSelect: document.getElementById("filterSelect"),
+  dspProtocolSelect: document.getElementById("dspProtocolSelect"),
+  alphaInput: document.getElementById("alphaInput"),
+  alphaOutput: document.getElementById("alphaOutput"),
+  windowInput: document.getElementById("windowInput"),
+  iirOrderInput: document.getElementById("iirOrderInput"),
+  iirLowInput: document.getElementById("iirLowInput"),
+  iirHighInput: document.getElementById("iirHighInput"),
+  adcSettingsSection: document.getElementById("adcSettingsSection"),
+  dspEquationMode: document.getElementById("dspEquationMode"),
+  dspTransferFunction: document.getElementById("dspTransferFunction"),
+  dspSectionEquation: document.getElementById("dspSectionEquation"),
+  dspCoefficientGrid: document.getElementById("dspCoefficientGrid"),
+  dspNyquistState: document.getElementById("dspNyquistState"),
+  iirResponseCanvas: document.getElementById("iirResponseCanvas"),
+  inputSettingsSection: document.getElementById("inputSettingsSection"),
+  classificationSettingsSection: document.getElementById("classificationSettingsSection"),
+  deviceLogSection: document.getElementById("deviceLogSection"),
+  inputState: document.getElementById("inputState"),
+  inputWindowInput: document.getElementById("inputWindowInput"),
+  inputFilterSelect: document.getElementById("inputFilterSelect"),
+  normalizeSelect: document.getElementById("normalizeSelect"),
+  inputAlphaInput: document.getElementById("inputAlphaInput"),
+  inputAlphaOutput: document.getElementById("inputAlphaOutput"),
+  inputMaWindowInput: document.getElementById("inputMaWindowInput"),
+  inputIirOrderInput: document.getElementById("inputIirOrderInput"),
+  inputIirLowInput: document.getElementById("inputIirLowInput"),
+  inputIirHighInput: document.getElementById("inputIirHighInput"),
+  labelInput: document.getElementById("labelInput"),
+  showRawToggle: document.getElementById("showRawToggle"),
+  showFilteredToggle: document.getElementById("showFilteredToggle"),
+  autoScaleToggle: document.getElementById("autoScaleToggle"),
+  adcPlotControls: document.getElementById("adcPlotControls"),
+  adcFormatSelect: document.getElementById("adcFormatSelect"),
+  adcPlotModeSelect: document.getElementById("adcPlotModeSelect"),
+  adcFormatState: document.getElementById("adcFormatState"),
+  adcLineState: document.getElementById("adcLineState"),
+  adcDelimiterSelect: document.getElementById("adcDelimiterSelect"),
+  adcCustomDelimiterInput: document.getElementById("adcCustomDelimiterInput"),
+  adcXAxisSelect: document.getElementById("adcXAxisSelect"),
+  adcYAxisSelect: document.getElementById("adcYAxisSelect"),
+  adcColumnAutoButton: document.getElementById("adcColumnAutoButton"),
+  adcColumnTypeList: document.getElementById("adcColumnTypeList"),
+  signalCanvas: document.getElementById("signalCanvas"),
+  metricGrid: document.getElementById("metricGrid"),
+  ppgView: document.getElementById("ppgView"),
+  ppgStatus: document.getElementById("ppgStatus"),
+  ppgSourceState: document.getElementById("ppgSourceState"),
+  ppgMetricState: document.getElementById("ppgMetricState"),
+  ppgWindowState: document.getElementById("ppgWindowState"),
+  ppgCnnState: document.getElementById("ppgCnnState"),
+  ppgFileInput: document.getElementById("ppgFileInput"),
+  ppgLoadSampleButton: document.getElementById("ppgLoadSampleButton"),
+  ppgAnalyzeButton: document.getElementById("ppgAnalyzeButton"),
+  ppgSampleRateInput: document.getElementById("ppgSampleRateInput"),
+  ppgStartInput: document.getElementById("ppgStartInput"),
+  ppgDurationInput: document.getElementById("ppgDurationInput"),
+  ppgRefractoryInput: document.getElementById("ppgRefractoryInput"),
+  ppgThresholdInput: document.getElementById("ppgThresholdInput"),
+  ppgThresholdOutput: document.getElementById("ppgThresholdOutput"),
+  ppgMetrics: document.getElementById("ppgMetrics"),
+  ppgCanvas: document.getElementById("ppgCanvas"),
+  ppgCnnCanvas: document.getElementById("ppgCnnCanvas"),
+  datasetView: document.getElementById("datasetView"),
+  modelView: document.getElementById("modelView"),
+  plotMeta: document.getElementById("plotMeta"),
+  metric1Label: document.getElementById("metric1Label"),
+  metric2Label: document.getElementById("metric2Label"),
+  metric3Label: document.getElementById("metric3Label"),
+  metric4Label: document.getElementById("metric4Label"),
+  rawMetric: document.getElementById("rawMetric"),
+  filteredMetric: document.getElementById("filteredMetric"),
+  voltageMetric: document.getElementById("voltageMetric"),
+  rateMetric: document.getElementById("rateMetric"),
+  filterState: document.getElementById("filterState"),
+  viewTabs: [...document.querySelectorAll(".view-tab")],
+  classStartButton: document.getElementById("classStartButton"),
+  classStopButton: document.getElementById("classStopButton"),
+  classificationState: document.getElementById("classificationState"),
+  classificationTopLabel: document.getElementById("classificationTopLabel"),
+  classificationTopScore: document.getElementById("classificationTopScore"),
+  classificationWindowState: document.getElementById("classificationWindowState"),
+  classificationList: document.getElementById("classificationList"),
+  logOutput: document.getElementById("logOutput"),
+  sampleTableBody: document.getElementById("sampleTableBody"),
+  lastTimestamp: document.getElementById("lastTimestamp"),
+  datasetSummary: document.getElementById("datasetSummary"),
+  datasetCaptureState: document.getElementById("datasetCaptureState"),
+  datasetLabelInput: document.getElementById("datasetLabelInput"),
+  datasetWindowInput: document.getElementById("datasetWindowInput"),
+  datasetStrideInput: document.getElementById("datasetStrideInput"),
+  datasetFeatureSelect: document.getElementById("datasetFeatureSelect"),
+  datasetSourceSelect: document.getElementById("datasetSourceSelect"),
+  datasetCaptureButton: document.getElementById("datasetCaptureButton"),
+  datasetCaptureOneButton: document.getElementById("datasetCaptureOneButton"),
+  datasetExportJsonButton: document.getElementById("datasetExportJsonButton"),
+  datasetExportCsvButton: document.getElementById("datasetExportCsvButton"),
+  datasetClearButton: document.getElementById("datasetClearButton"),
+  datasetImportInput: document.getElementById("datasetImportInput"),
+  datasetFeatureState: document.getElementById("datasetFeatureState"),
+  datasetSizeState: document.getElementById("datasetSizeState"),
+  datasetPreviewState: document.getElementById("datasetPreviewState"),
+  datasetPreviewCanvas: document.getElementById("datasetPreviewCanvas"),
+  datasetLabelList: document.getElementById("datasetLabelList"),
+  datasetTableBody: document.getElementById("datasetTableBody"),
+  modelStatus: document.getElementById("modelStatus"),
+  modelShapeState: document.getElementById("modelShapeState"),
+  modelArchitectureCanvas: document.getElementById("modelArchitectureCanvas"),
+  hiddenLayerInput: document.getElementById("hiddenLayerInput"),
+  neuronInput: document.getElementById("neuronInput"),
+  activationSelect: document.getElementById("activationSelect"),
+  learningRateInput: document.getElementById("learningRateInput"),
+  epochInput: document.getElementById("epochInput"),
+  pruningInput: document.getElementById("pruningInput"),
+  pruningOutput: document.getElementById("pruningOutput"),
+  quantizeToggle: document.getElementById("quantizeToggle"),
+  trainModelButton: document.getElementById("trainModelButton"),
+  exportModelJsonButton: document.getElementById("exportModelJsonButton"),
+  exportCArrayButton: document.getElementById("exportCArrayButton"),
+  modelMetricState: document.getElementById("modelMetricState"),
+  modelMetrics: document.getElementById("modelMetrics"),
+  modelLog: document.getElementById("modelLog")
+};
+
+const ctx = el.signalCanvas.getContext("2d");
+
+function resizeCanvasToDisplaySize() {
+  const rect = el.signalCanvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const displayWidth = Math.max(280, Math.round(rect.width));
+  const displayHeight = Math.max(280, Math.round(rect.height));
+  const backingWidth = Math.round(displayWidth * dpr);
+  const backingHeight = Math.round(displayHeight * dpr);
+
+  if (el.signalCanvas.width !== backingWidth || el.signalCanvas.height !== backingHeight) {
+    el.signalCanvas.width = backingWidth;
+    el.signalCanvas.height = backingHeight;
+  }
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { width: displayWidth, height: displayHeight };
+}
+
+function resizeAuxCanvasToDisplaySize(canvas, minHeight = 180) {
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const displayWidth = Math.max(280, Math.round(rect.width));
+  const displayHeight = Math.max(minHeight, Math.round(rect.height));
+  const backingWidth = Math.round(displayWidth * dpr);
+  const backingHeight = Math.round(displayHeight * dpr);
+
+  if (canvas.width !== backingWidth || canvas.height !== backingHeight) {
+    canvas.width = backingWidth;
+    canvas.height = backingHeight;
+  }
+
+  const canvasCtx = canvas.getContext("2d");
+  canvasCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx: canvasCtx, width: displayWidth, height: displayHeight };
+}
+
+function setStatus(node, text, mode = "muted") {
+  node.textContent = text;
+  node.className = `status-pill ${mode}`.trim();
+}
+
+function logLine(line, direction = "rx") {
+  const prefix = direction === "tx" ? ">>" : "<<";
+  const text = `${new Date().toLocaleTimeString()} ${prefix} ${line}`;
+  el.logOutput.textContent = `${text}\n${el.logOutput.textContent}`.slice(0, 12000);
+}
+
+function setUiEnabled() {
+  const connected = state.connected;
+  const streaming = state.streaming;
+
+  el.connectButton.disabled = connected;
+  el.disconnectButton.disabled = !connected;
+  el.startButton.disabled = !connected || streaming;
+  el.stopButton.disabled = !connected || !streaming;
+  el.applyAcquisitionButton.disabled = !connected;
+  el.applyFilterButton.disabled = !connected;
+  el.pingButton.disabled = !connected;
+  el.recordButton.disabled = !connected;
+  el.classStartButton.disabled = !connected || state.classification.active;
+  el.classStopButton.disabled = !connected || !state.classification.active;
+  el.exportButton.disabled = state.records.length === 0;
+  el.datasetCaptureOneButton.disabled = state.imuSamples.length < getDatasetWindowSize();
+  el.datasetExportJsonButton.disabled = state.dataset.examples.length === 0;
+  el.datasetExportCsvButton.disabled = state.dataset.examples.length === 0;
+  el.trainModelButton.disabled = state.dataset.examples.length < 2 || labelCounts().length < 2;
+  el.exportModelJsonButton.disabled = !state.model.trained;
+  el.exportCArrayButton.disabled = !state.model.trained;
+  if (el.ppgAnalyzeButton) {
+    el.ppgAnalyzeButton.disabled = state.ppg.loading || state.ppg.samples.length === 0;
+  }
+  if (el.ppgLoadSampleButton) {
+    el.ppgLoadSampleButton.disabled = state.ppg.loading;
+  }
+  if (el.ppgFileInput) {
+    el.ppgFileInput.disabled = state.ppg.loading;
+  }
+  el.bootloaderButton.disabled = !("serial" in navigator) || state.flash.directBusy;
+  el.flashButton.disabled = !("serial" in navigator) || state.flash.directBusy;
+
+  el.recordButton.textContent = state.recording ? "Stop Rec" : "Record";
+  el.datasetCaptureButton.textContent = state.dataset.captureActive ? "Stop Capture" : "Start Capture";
+  el.flashButton.textContent = state.flash.directBusy ? "Flashing..." : "Flash Firmware";
+  el.startButton.textContent = state.activeView === "classification" ? "Start + Class" : "Start";
+  el.stopButton.textContent = state.activeView === "classification" ? "Stop + Class" : "Stop";
+  setStatus(el.portStatus, connected ? "Connected" : "Disconnected", connected ? "" : "muted");
+  setStatus(el.streamStatus, streaming ? "Streaming" : "Idle", streaming ? "warning" : "muted");
+}
+
+function normalizeNumber(value, fallback, min, max) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, parsed));
+}
+
+function finiteOrNull(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatNumber(value, digits = 1) {
+  return Number.isFinite(value) ? value.toFixed(digits) : "--";
+}
+
+function formatAdcMetric(value, digits = 1, unit = "") {
+  if (!Number.isFinite(value)) {
+    return "--";
+  }
+  const suffix = unit ? ` ${unit}` : "";
+  return `${value.toFixed(digits)}${suffix}`;
+}
+
+function rawToMillivolts(raw) {
+  if (!Number.isFinite(raw)) {
+    return NaN;
+  }
+  const maxCode = Math.max(1, (1 << state.settings.resolution) - 1);
+  return (raw / maxCode) * 3300;
+}
+
+function nextAdcSyntheticSeq() {
+  const seq = state.adcSyntheticSeq;
+  state.adcSyntheticSeq += 1;
+  return seq;
+}
+
+function formatSeconds(value) {
+  return value >= 1 ? value.toFixed(2) : value.toFixed(3);
+}
+
+function adcWindowSamplesFromSeconds(seconds) {
+  const rateHz = Math.max(1, normalizeNumber(state.settings.rateHz, 100, 1, 1000));
+  return Math.max(1, Math.min(32, Math.round(normalizeNumber(seconds, state.settings.windowSec, 0.001, 32) * rateHz)));
+}
+
+function adcWindowSecondsFromSamples(samples) {
+  const rateHz = Math.max(1, normalizeNumber(state.settings.rateHz, 100, 1, 1000));
+  return normalizeNumber(samples, 8, 1, 32) / rateHz;
+}
+
+function updateAdcWindowInputFromSamples(samples) {
+  const sampleCount = Math.round(normalizeNumber(samples, 8, 1, 32));
+  state.settings.window = sampleCount;
+  state.settings.windowSec = adcWindowSecondsFromSamples(sampleCount);
+  el.windowInput.value = formatSeconds(state.settings.windowSec);
+  updateFilterStateText();
+}
+
+function updateFilterStateText() {
+  el.filterState.textContent = `${state.settings.filter} ${formatSeconds(state.settings.windowSec)}s`;
+  renderDspPanel();
+}
+
+function dspSampleRateHz() {
+  return normalizeNumber(el.rateInput?.value ?? state.settings.rateHz, state.settings.rateHz || 100, 1, 1000);
+}
+
+function dspMaxCutoffHz(sampleRateHz = dspSampleRateHz()) {
+  return Math.max(0.02, sampleRateHz * 0.45);
+}
+
+function lowPassCoefficientAtRate(cutoffHz, sampleRateHz) {
+  const cutoff = Math.max(0.001, cutoffHz);
+  const dt = 1 / Math.max(1, sampleRateHz);
+  const rc = 1 / (2 * Math.PI * cutoff);
+  return dt / (rc + dt);
+}
+
+function highPassCoefficientAtRate(cutoffHz, sampleRateHz) {
+  const cutoff = Math.max(0.001, cutoffHz);
+  const dt = 1 / Math.max(1, sampleRateHz);
+  const rc = 1 / (2 * Math.PI * cutoff);
+  return rc / (rc + dt);
+}
+
+function coeffText(value) {
+  return Number.isFinite(value) ? value.toPrecision(6) : "--";
+}
+
+function syncDspSettingsFromControls({ writeBack = false } = {}) {
+  const sampleRateHz = dspSampleRateHz();
+  const maxCutoff = dspMaxCutoffHz(sampleRateHz);
+  const highHz = normalizeNumber(el.iirHighInput.value, state.settings.iirHighHz, 0.02, maxCutoff);
+  const lowHz = Math.min(
+    normalizeNumber(el.iirLowInput.value, state.settings.iirLowHz, 0.01, maxCutoff),
+    Math.max(0.01, highHz - 0.01)
+  );
+  const order = Math.round(normalizeNumber(el.iirOrderInput.value, state.settings.iirOrder, 1, 4));
+
+  state.settings.filter = el.filterSelect.value;
+  state.settings.dspProtocol = el.dspProtocolSelect.value || "AUTO";
+  state.settings.rateHz = sampleRateHz;
+  state.settings.alpha = normalizeNumber(el.alphaInput.value, state.settings.alpha, 0.001, 1);
+  state.settings.windowSec = normalizeNumber(el.windowInput.value, state.settings.windowSec, 0.001, 32);
+  state.settings.window = adcWindowSamplesFromSeconds(state.settings.windowSec);
+  state.settings.windowSec = adcWindowSecondsFromSamples(state.settings.window);
+  state.settings.iirOrder = order;
+  state.settings.iirLowHz = lowHz;
+  state.settings.iirHighHz = highHz;
+
+  if (writeBack) {
+    el.rateInput.value = sampleRateHz.toFixed(Math.abs(sampleRateHz - Math.round(sampleRateHz)) < 0.01 ? 0 : 1);
+    el.alphaInput.value = String(state.settings.alpha);
+    el.alphaOutput.textContent = state.settings.alpha.toFixed(3);
+    el.windowInput.value = formatSeconds(state.settings.windowSec);
+    el.iirOrderInput.value = String(order);
+    el.iirLowInput.value = lowHz.toFixed(3).replace(/\.?0+$/, "");
+    el.iirHighInput.value = highHz.toFixed(3).replace(/\.?0+$/, "");
+  }
+
+  return {
+    mode: state.settings.filter,
+    protocol: state.settings.dspProtocol,
+    sampleRateHz,
+    nyquistHz: sampleRateHz / 2,
+    maxCutoff,
+    order,
+    lowHz,
+    highHz,
+    emaAlpha: state.settings.alpha,
+    maWindow: state.settings.window
+  };
+}
+
+function lpfMagnitudeAt(frequencyHz, cutoffHz, sampleRateHz) {
+  const alpha = lowPassCoefficientAtRate(cutoffHz, sampleRateHz);
+  const a1 = 1 - alpha;
+  const w = (2 * Math.PI * frequencyHz) / sampleRateHz;
+  const denRe = 1 - a1 * Math.cos(w);
+  const denIm = a1 * Math.sin(w);
+  return alpha / Math.max(1e-9, Math.sqrt(denRe * denRe + denIm * denIm));
+}
+
+function hpfMagnitudeAt(frequencyHz, cutoffHz, sampleRateHz) {
+  const beta = highPassCoefficientAtRate(cutoffHz, sampleRateHz);
+  const w = (2 * Math.PI * frequencyHz) / sampleRateHz;
+  const numRe = beta * (1 - Math.cos(w));
+  const numIm = beta * Math.sin(w);
+  const denRe = 1 - beta * Math.cos(w);
+  const denIm = beta * Math.sin(w);
+  return Math.sqrt(numRe * numRe + numIm * numIm) / Math.max(1e-9, Math.sqrt(denRe * denRe + denIm * denIm));
+}
+
+function maMagnitudeAt(frequencyHz, sampleRateHz, windowSamples) {
+  const w = (2 * Math.PI * frequencyHz) / sampleRateHz;
+  const den = Math.sin(w / 2);
+  if (Math.abs(den) < 1e-9) {
+    return 1;
+  }
+  return Math.abs(Math.sin((windowSamples * w) / 2) / (windowSamples * den));
+}
+
+function dspMagnitudeAt(frequencyHz, params) {
+  if (params.mode === "IIR_LPF") {
+    return Math.pow(lpfMagnitudeAt(frequencyHz, params.highHz, params.sampleRateHz), params.order);
+  }
+  if (params.mode === "IIR_HPF") {
+    return Math.pow(hpfMagnitudeAt(frequencyHz, params.lowHz, params.sampleRateHz), params.order);
+  }
+  if (params.mode === "IIR_BPF") {
+    return Math.pow(hpfMagnitudeAt(frequencyHz, params.lowHz, params.sampleRateHz), params.order) *
+      Math.pow(lpfMagnitudeAt(frequencyHz, params.highHz, params.sampleRateHz), params.order);
+  }
+  if (params.mode === "EMA") {
+    const alpha = params.emaAlpha;
+    const a1 = 1 - alpha;
+    const w = (2 * Math.PI * frequencyHz) / params.sampleRateHz;
+    const denRe = 1 - a1 * Math.cos(w);
+    const denIm = a1 * Math.sin(w);
+    return alpha / Math.max(1e-9, Math.sqrt(denRe * denRe + denIm * denIm));
+  }
+  if (params.mode === "MA") {
+    return maMagnitudeAt(frequencyHz, params.sampleRateHz, params.maWindow);
+  }
+  return 1;
+}
+
+function describeDspTransfer(params) {
+  const lowAlpha = lowPassCoefficientAtRate(params.lowHz, params.sampleRateHz);
+  const highAlpha = lowPassCoefficientAtRate(params.highHz, params.sampleRateHz);
+  const lowBeta = highPassCoefficientAtRate(params.lowHz, params.sampleRateHz);
+  const emaA1 = 1 - params.emaAlpha;
+  const lowA1 = 1 - lowAlpha;
+  const highA1 = 1 - highAlpha;
+
+  if (params.mode === "IIR_LPF") {
+    return {
+      modeLabel: `IIR LPF / fs=${params.sampleRateHz.toFixed(1)} Hz / N=${params.order}`,
+      transfer: `H_LPF(z) = ${coeffText(highAlpha)} / (1 - ${coeffText(highA1)} z^-1)\nH_total(z) = H_LPF(z)^${params.order}`,
+      equation: `y[n] = ${coeffText(highA1)} y[n-1] + ${coeffText(highAlpha)} x[n]`,
+      coefficients: [
+        ["LPF cutoff", `${params.highHz.toFixed(3)} Hz`],
+        ["alpha", coeffText(highAlpha)],
+        ["b0", coeffText(highAlpha)],
+        ["a1", coeffText(highA1)]
+      ]
+    };
+  }
+
+  if (params.mode === "IIR_HPF") {
+    return {
+      modeLabel: `IIR HPF / fs=${params.sampleRateHz.toFixed(1)} Hz / N=${params.order}`,
+      transfer: `H_HPF(z) = ${coeffText(lowBeta)}(1 - z^-1) / (1 - ${coeffText(lowBeta)} z^-1)\nH_total(z) = H_HPF(z)^${params.order}`,
+      equation: `y[n] = ${coeffText(lowBeta)} y[n-1] + ${coeffText(lowBeta)} x[n] - ${coeffText(lowBeta)} x[n-1]`,
+      coefficients: [
+        ["HPF cutoff", `${params.lowHz.toFixed(3)} Hz`],
+        ["beta", coeffText(lowBeta)],
+        ["b0, b1", `${coeffText(lowBeta)}, ${coeffText(-lowBeta)}`],
+        ["a1", coeffText(lowBeta)]
+      ]
+    };
+  }
+
+  if (params.mode === "IIR_BPF") {
+    return {
+      modeLabel: `IIR BPF / fs=${params.sampleRateHz.toFixed(1)} Hz / N=${params.order}`,
+      transfer: `H_BPF(z) = H_HPF(z, ${params.lowHz.toFixed(3)} Hz)^${params.order} * H_LPF(z, ${params.highHz.toFixed(3)} Hz)^${params.order}`,
+      equation: `HPF: y[n] = ${coeffText(lowBeta)} y[n-1] + ${coeffText(lowBeta)} x[n] - ${coeffText(lowBeta)} x[n-1]\nLPF: y[n] = ${coeffText(highA1)} y[n-1] + ${coeffText(highAlpha)} x[n]`,
+      coefficients: [
+        ["HPF beta", coeffText(lowBeta)],
+        ["LPF alpha", coeffText(highAlpha)],
+        ["Low / High", `${params.lowHz.toFixed(3)} / ${params.highHz.toFixed(3)} Hz`],
+        ["Cascade", `HPF^${params.order} -> LPF^${params.order}`]
+      ]
+    };
+  }
+
+  if (params.mode === "EMA") {
+    return {
+      modeLabel: `EMA / fs=${params.sampleRateHz.toFixed(1)} Hz`,
+      transfer: `H_EMA(z) = ${coeffText(params.emaAlpha)} / (1 - ${coeffText(emaA1)} z^-1)`,
+      equation: `y[n] = ${coeffText(emaA1)} y[n-1] + ${coeffText(params.emaAlpha)} x[n]`,
+      coefficients: [
+        ["alpha", coeffText(params.emaAlpha)],
+        ["b0", coeffText(params.emaAlpha)],
+        ["a1", coeffText(emaA1)],
+        ["Type", "1st-order IIR"]
+      ]
+    };
+  }
+
+  if (params.mode === "MA") {
+    return {
+      modeLabel: `Moving average / fs=${params.sampleRateHz.toFixed(1)} Hz`,
+      transfer: `H_MA(z) = (1/${params.maWindow}) * (1 - z^-${params.maWindow}) / (1 - z^-1)`,
+      equation: `y[n] = average(x[n], ... x[n-${params.maWindow - 1}])`,
+      coefficients: [
+        ["Window", `${params.maWindow} samples`],
+        ["Window time", `${formatSeconds(params.maWindow / params.sampleRateHz)} s`],
+        ["b[k]", `1/${params.maWindow}`],
+        ["Type", "FIR"]
+      ]
+    };
+  }
+
+  return {
+    modeLabel: `RAW / fs=${params.sampleRateHz.toFixed(1)} Hz`,
+    transfer: "H(z) = 1",
+    equation: "y[n] = x[n]",
+    coefficients: [
+      ["Gain", "1"],
+      ["Delay", "0"],
+      ["Type", "Bypass"],
+      ["Cutoff", "--"]
+    ]
+  };
+}
+
+function renderDspCoefficientGrid(items) {
+  if (!el.dspCoefficientGrid) {
+    return;
+  }
+  el.dspCoefficientGrid.replaceChildren(
+    ...items.map(([label, value]) => {
+      const node = document.createElement("div");
+      const labelNode = document.createElement("span");
+      const valueNode = document.createElement("strong");
+      labelNode.textContent = label;
+      valueNode.textContent = value;
+      node.append(labelNode, valueNode);
+      return node;
+    })
+  );
+}
+
+function drawDspResponsePlot(params) {
+  if (!el.iirResponseCanvas) {
+    return;
+  }
+  const { ctx: responseCtx, width, height } = resizeAuxCanvasToDisplaySize(el.iirResponseCanvas, 190);
+  const pad = { left: 42, right: 14, top: 18, bottom: 30 };
+  const plotWidth = width - pad.left - pad.right;
+  const plotHeight = height - pad.top - pad.bottom;
+  const minDb = -60;
+  const maxDb = 6;
+  const nyquist = params.sampleRateHz / 2;
+
+  responseCtx.clearRect(0, 0, width, height);
+  responseCtx.fillStyle = "#ffffff";
+  responseCtx.fillRect(0, 0, width, height);
+  drawGridOn(responseCtx, width, height, pad, plotWidth, plotHeight);
+
+  responseCtx.strokeStyle = "#008c8c";
+  responseCtx.lineWidth = 2;
+  responseCtx.beginPath();
+  const points = Math.max(96, Math.min(320, Math.round(plotWidth)));
+  for (let index = 0; index < points; index++) {
+    const frequency = (nyquist * index) / Math.max(1, points - 1);
+    const magnitude = Math.max(1e-6, dspMagnitudeAt(frequency, params));
+    const db = Math.max(minDb, Math.min(maxDb, 20 * Math.log10(magnitude)));
+    const x = pad.left + (plotWidth * index) / Math.max(1, points - 1);
+    const y = pad.top + plotHeight - ((db - minDb) / (maxDb - minDb)) * plotHeight;
+    if (index === 0) {
+      responseCtx.moveTo(x, y);
+    } else {
+      responseCtx.lineTo(x, y);
+    }
+  }
+  responseCtx.stroke();
+
+  const markers = [];
+  if (params.mode === "IIR_HPF" || params.mode === "IIR_BPF") {
+    markers.push({ hz: params.lowHz, label: "low", color: "#d28a00" });
+  }
+  if (params.mode === "IIR_LPF" || params.mode === "IIR_BPF") {
+    markers.push({ hz: params.highHz, label: "high", color: "#2767c9" });
+  }
+  for (const marker of markers) {
+    const x = pad.left + (Math.min(marker.hz, nyquist) / nyquist) * plotWidth;
+    responseCtx.strokeStyle = marker.color;
+    responseCtx.setLineDash([4, 4]);
+    responseCtx.beginPath();
+    responseCtx.moveTo(x, pad.top);
+    responseCtx.lineTo(x, pad.top + plotHeight);
+    responseCtx.stroke();
+    responseCtx.setLineDash([]);
+    responseCtx.fillStyle = marker.color;
+    responseCtx.font = "11px Segoe UI, Arial, sans-serif";
+    responseCtx.fillText(marker.label, Math.min(x + 4, width - 44), pad.top + 13);
+  }
+
+  responseCtx.fillStyle = "#637083";
+  responseCtx.font = "11px Segoe UI, Arial, sans-serif";
+  responseCtx.fillText(`${maxDb} dB`, 7, pad.top + 4);
+  responseCtx.fillText(`${minDb} dB`, 4, pad.top + plotHeight);
+  responseCtx.fillText("0 Hz", pad.left, height - 8);
+  responseCtx.fillText(`${nyquist.toFixed(1)} Hz`, width - pad.right - 58, height - 8);
+}
+
+function renderDspPanel({ writeBack = false } = {}) {
+  if (!el.dspTransferFunction) {
+    return;
+  }
+  const params = syncDspSettingsFromControls({ writeBack });
+  const info = describeDspTransfer(params);
+  el.dspEquationMode.textContent = info.modeLabel;
+  el.dspTransferFunction.textContent = info.transfer;
+  el.dspSectionEquation.textContent = info.equation;
+  el.dspNyquistState.textContent = `Nyquist: ${params.nyquistHz.toFixed(1)} Hz / max cutoff: ${params.maxCutoff.toFixed(1)} Hz`;
+  renderDspCoefficientGrid(info.coefficients);
+  drawDspResponsePlot(params);
+}
+
+function resolveDspProtocol() {
+  const explicit = el.dspProtocolSelect?.value || state.settings.dspProtocol || "AUTO";
+  if (explicit !== "AUTO") {
+    return explicit;
+  }
+  const latestFormat = state.latestSample?.format;
+  if (latestFormat === "FILT" || state.settings.adcFormat === "FILT") {
+    return "DAY2_IIR";
+  }
+  if (state.settings.dspProtocolHint) {
+    return state.settings.dspProtocolHint;
+  }
+  return "STAGE1";
+}
+
+function day2IirModeName(mode) {
+  if (mode === "IIR_LPF") {
+    return "LPF";
+  }
+  if (mode === "IIR_HPF") {
+    return "HPF";
+  }
+  if (mode === "IIR_BPF") {
+    return "BPF";
+  }
+  return "RAW";
+}
+
+function syncAdcPlotSettings() {
+  state.settings.adcFormat = el.adcFormatSelect?.value || "ALL";
+  state.settings.adcPlotMode = el.adcPlotModeSelect?.value || "RAW_FILTERED";
+  updateAdcFormatState();
+}
+
+function getVisibleAdcSamples() {
+  const format = state.settings.adcFormat || "ALL";
+  return format === "ALL"
+    ? state.samples
+    : state.samples.filter((sample) => sample.format === format);
+}
+
+function updateAdcFormatState() {
+  if (!el.adcFormatState) {
+    return;
+  }
+  const format = state.settings.adcFormat || "ALL";
+  const visible = getVisibleAdcSamples().length;
+  const total = state.samples.length;
+  const countText = format === "ALL" ? `${total}` : `${visible} / ${total}`;
+  const label = ADC_FORMAT_LABELS[format] || format;
+  el.adcFormatState.textContent = `${label} - ${countText}`;
+}
+
+function getAdcPlotValue(sample, key) {
+  if (key === "delta") {
+    return Number.isFinite(sample.filtered) && Number.isFinite(sample.raw)
+      ? sample.filtered - sample.raw
+      : NaN;
+  }
+  return Number(sample[key]);
+}
+
+function getAdcPlotSeries() {
+  const mode = state.settings.adcPlotMode || "RAW_FILTERED";
+  if (mode === "RAW") {
+    return [{ key: "raw", ...ADC_PLOT_SERIES.raw }];
+  }
+  if (mode === "FILTERED") {
+    return [{ key: "filtered", ...ADC_PLOT_SERIES.filtered }];
+  }
+  if (mode === "MILLIVOLTS") {
+    return [{ key: "millivolts", ...ADC_PLOT_SERIES.millivolts }];
+  }
+  if (mode === "DELTA") {
+    return [{ key: "delta", ...ADC_PLOT_SERIES.delta }];
+  }
+  return [
+    ...(el.showRawToggle.checked ? [{ key: "raw", ...ADC_PLOT_SERIES.raw }] : []),
+    ...(el.showFilteredToggle.checked ? [{ key: "filtered", ...ADC_PLOT_SERIES.filtered }] : [])
+  ];
+}
+
+function createPreprocessState() {
+  return {
+    ema: Object.fromEntries(IMU_ACCEL_AXES.map((axis) => [axis, null])),
+    maWindow: [],
+    iir: Object.fromEntries(IMU_ACCEL_AXES.map((axis) => [axis, {
+      lpf: [],
+      lpfInit: [],
+      hpfPrevIn: [],
+      hpfPrevOut: [],
+      hpfInit: []
+    }])),
+    filteredWindow: []
+  };
+}
+
+function resetPreprocessState() {
+  state.preprocess = createPreprocessState();
+}
+
+function getInputWindowSize() {
+  return Math.round(normalizeNumber(state.settings.inputWindowSamples, 125, 16, MAX_IMU_POINTS));
+}
+
+function getInputSampleRateHz() {
+  return normalizeNumber(state.settings.rateHz, 62.5, 1, 1000);
+}
+
+function isInputPreprocessActive() {
+  return state.settings.inputFilter !== "NONE" || state.settings.normalizeMode !== "NONE";
+}
+
+function getInputUnits() {
+  return state.settings.normalizeMode === "NONE" ? "g" : "norm";
+}
+
+function makeAxisObject(sample, prefix = "") {
+  return {
+    ax: sample[`${prefix}ax`] ?? sample.ax,
+    ay: sample[`${prefix}ay`] ?? sample.ay,
+    az: sample[`${prefix}az`] ?? sample.az
+  };
+}
+
+function lowPassCoefficient(cutoffHz) {
+  const cutoff = Math.max(0.001, cutoffHz);
+  const dt = 1 / getInputSampleRateHz();
+  const rc = 1 / (2 * Math.PI * cutoff);
+  return dt / (rc + dt);
+}
+
+function highPassCoefficient(cutoffHz) {
+  const cutoff = Math.max(0.001, cutoffHz);
+  const dt = 1 / getInputSampleRateHz();
+  const rc = 1 / (2 * Math.PI * cutoff);
+  return rc / (rc + dt);
+}
+
+function applyAxisLowPass(axis, value, cutoffHz, order) {
+  const axisState = state.preprocess.iir[axis];
+  const alpha = lowPassCoefficient(cutoffHz);
+  let out = value;
+  for (let stage = 0; stage < order; stage++) {
+    if (!axisState.lpfInit[stage]) {
+      axisState.lpf[stage] = out;
+      axisState.lpfInit[stage] = true;
+    } else {
+      axisState.lpf[stage] += alpha * (out - axisState.lpf[stage]);
+    }
+    out = axisState.lpf[stage];
+  }
+  return out;
+}
+
+function applyAxisHighPass(axis, value, cutoffHz, order) {
+  const axisState = state.preprocess.iir[axis];
+  const alpha = highPassCoefficient(cutoffHz);
+  let out = value;
+  for (let stage = 0; stage < order; stage++) {
+    if (!axisState.hpfInit[stage]) {
+      axisState.hpfPrevIn[stage] = out;
+      axisState.hpfPrevOut[stage] = 0;
+      axisState.hpfInit[stage] = true;
+      out = 0;
+    } else {
+      const next = alpha * (axisState.hpfPrevOut[stage] + out - axisState.hpfPrevIn[stage]);
+      axisState.hpfPrevIn[stage] = out;
+      axisState.hpfPrevOut[stage] = next;
+      out = next;
+    }
+  }
+  return out;
+}
+
+function filterImuSample(sample) {
+  const mode = state.settings.inputFilter;
+  const order = Math.round(normalizeNumber(state.settings.inputIirOrder, 2, 1, 4));
+  const maxCutoff = Math.max(0.01, getInputSampleRateHz() * 0.45);
+  const highHz = normalizeNumber(state.settings.inputIirHighHz, 8.0, 0.002, maxCutoff);
+  const lowHz = Math.min(
+    normalizeNumber(state.settings.inputIirLowHz, 0.5, 0.001, maxCutoff),
+    Math.max(0.001, highHz - 0.001)
+  );
+
+  if (mode === "MA") {
+    state.preprocess.maWindow.push(makeAxisObject(sample));
+    const windowSize = Math.round(normalizeNumber(state.settings.inputMaWindow, 5, 1, 128));
+    while (state.preprocess.maWindow.length > windowSize) {
+      state.preprocess.maWindow.shift();
+    }
+    return Object.fromEntries(IMU_ACCEL_AXES.map((axis) => {
+      const sum = state.preprocess.maWindow.reduce((acc, item) => acc + item[axis], 0);
+      return [axis, sum / state.preprocess.maWindow.length];
+    }));
+  }
+
+  if (mode === "EMA") {
+    const alpha = normalizeNumber(state.settings.inputAlpha, 0.2, 0.001, 1);
+    return Object.fromEntries(IMU_ACCEL_AXES.map((axis) => {
+      const previous = state.preprocess.ema[axis];
+      const next = previous == null ? sample[axis] : previous + alpha * (sample[axis] - previous);
+      state.preprocess.ema[axis] = next;
+      return [axis, next];
+    }));
+  }
+
+  if (mode === "IIR_LPF") {
+    return Object.fromEntries(IMU_ACCEL_AXES.map((axis) => [
+      axis,
+      applyAxisLowPass(axis, sample[axis], highHz, order)
+    ]));
+  }
+
+  if (mode === "IIR_HPF") {
+    return Object.fromEntries(IMU_ACCEL_AXES.map((axis) => [
+      axis,
+      applyAxisHighPass(axis, sample[axis], lowHz, order)
+    ]));
+  }
+
+  if (mode === "IIR_BPF") {
+    return Object.fromEntries(IMU_ACCEL_AXES.map((axis) => {
+      const highPassed = applyAxisHighPass(axis, sample[axis], lowHz, order);
+      return [axis, applyAxisLowPass(axis, highPassed, highHz, order)];
+    }));
+  }
+
+  return makeAxisObject(sample);
+}
+
+function normalizeImuSample(filtered) {
+  state.preprocess.filteredWindow.push(filtered);
+  const windowSize = getInputWindowSize();
+  while (state.preprocess.filteredWindow.length > windowSize) {
+    state.preprocess.filteredWindow.shift();
+  }
+
+  if (state.settings.normalizeMode === "NONE") {
+    return filtered;
+  }
+
+  const normalized = {};
+  for (const axis of IMU_ACCEL_AXES) {
+    const values = state.preprocess.filteredWindow.map((item) => item[axis]);
+    const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+    if (state.settings.normalizeMode === "CENTER") {
+      normalized[axis] = filtered[axis] - mean;
+    } else if (state.settings.normalizeMode === "ZSCORE") {
+      const variance = values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length;
+      normalized[axis] = (filtered[axis] - mean) / Math.max(1e-6, Math.sqrt(variance));
+    } else if (state.settings.normalizeMode === "MINMAX") {
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      normalized[axis] = ((filtered[axis] - min) / Math.max(1e-6, max - min)) * 2 - 1;
+    } else {
+      normalized[axis] = filtered[axis];
+    }
+  }
+  return normalized;
+}
+
+function processImuSample(sample) {
+  const filtered = filterImuSample(sample);
+  const normalized = normalizeImuSample(filtered);
+  return {
+    seq: sample.seq,
+    micros: sample.micros,
+    fax: filtered.ax,
+    fay: filtered.ay,
+    faz: filtered.az,
+    pax: normalized.ax,
+    pay: normalized.ay,
+    paz: normalized.az,
+    receivedAt: sample.receivedAt
+  };
+}
+
+function rebuildImuProcessing() {
+  resetPreprocessState();
+  state.imuProcessedSamples = state.imuSamples.map((sample) => processImuSample(sample));
+  state.latestProcessedImu = state.imuProcessedSamples[state.imuProcessedSamples.length - 1] || null;
+}
+
+function getVisibleImuFrames() {
+  const count = getInputWindowSize();
+  return {
+    raw: state.imuSamples.slice(-count),
+    processed: state.imuProcessedSamples.slice(-count)
+  };
+}
+
+function getDatasetWindowSize() {
+  return Math.round(normalizeNumber(el.datasetWindowInput?.value, 125, 16, MAX_IMU_POINTS));
+}
+
+function getDatasetStrideSize() {
+  return Math.round(normalizeNumber(el.datasetStrideInput?.value, 31, 1, MAX_IMU_POINTS));
+}
+
+function getDatasetWindow(source = el.datasetSourceSelect?.value || "PROCESSED") {
+  const windowSize = getDatasetWindowSize();
+  if (source === "RAW") {
+    return state.imuSamples.slice(-windowSize).map((sample) => ({
+      ax: sample.ax,
+      ay: sample.ay,
+      az: sample.az,
+      seq: sample.seq,
+      micros: sample.micros
+    }));
+  }
+
+  return state.imuProcessedSamples.slice(-windowSize).map((sample) => ({
+    ax: sample.pax,
+    ay: sample.pay,
+    az: sample.paz,
+    seq: sample.seq,
+    micros: sample.micros
+  }));
+}
+
+function featureNamesForMode(mode, windowSize) {
+  if (mode === "FLATTEN") {
+    const names = [];
+    for (let i = 0; i < windowSize; i++) {
+      names.push(`ax_${i}`, `ay_${i}`, `az_${i}`);
+    }
+    return names;
+  }
+
+  return IMU_ACCEL_AXES.flatMap((axis) => [
+    `${axis}_mean`,
+    `${axis}_std`,
+    `${axis}_min`,
+    `${axis}_max`,
+    `${axis}_rms`
+  ]);
+}
+
+function extractWindowFeatures(window, mode) {
+  if (mode === "FLATTEN") {
+    return window.flatMap((sample) => [sample.ax, sample.ay, sample.az]);
+  }
+
+  return IMU_ACCEL_AXES.flatMap((axis) => {
+    const values = window.map((sample) => sample[axis]);
+    const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+    const variance = values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length;
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const rms = Math.sqrt(values.reduce((sum, value) => sum + value * value, 0) / values.length);
+    return [mean, Math.sqrt(variance), min, max, rms];
+  });
+}
+
+function getPlannedFeatureSize() {
+  const featureMode = el.datasetFeatureSelect?.value || "STATS";
+  const windowSize = getDatasetWindowSize();
+  return featureMode === "FLATTEN" ? windowSize * IMU_ACCEL_AXES.length : 15;
+}
+
+function getDatasetShape() {
+  const examples = state.dataset.examples;
+  const first = examples.find((example) => Array.isArray(example.features));
+  const featureSize = first?.features?.length || getPlannedFeatureSize();
+  const windowSamples = first?.windowSamples || getDatasetWindowSize();
+  const labels = labelCounts().length;
+  return {
+    examples: examples.length,
+    featureSize,
+    windowSamples,
+    labels,
+    featureMode: first?.featureMode || el.datasetFeatureSelect?.value || "STATS",
+    source: first?.source || el.datasetSourceSelect?.value || "PROCESSED"
+  };
+}
+
+function formatDatasetSize(shape = getDatasetShape()) {
+  return `${shape.examples} x ${shape.featureSize} features`;
+}
+
+function captureDatasetWindow(reason = "manual") {
+  const label = (el.datasetLabelInput.value || "unlabeled").trim() || "unlabeled";
+  const source = el.datasetSourceSelect.value;
+  const featureMode = el.datasetFeatureSelect.value;
+  const window = getDatasetWindow(source);
+  const windowSize = getDatasetWindowSize();
+  if (window.length < windowSize) {
+    el.datasetCaptureState.textContent = `Need ${windowSize}`;
+    return false;
+  }
+
+  const features = extractWindowFeatures(window, featureMode);
+  const example = {
+    id: state.dataset.nextId++,
+    label,
+    source,
+    featureMode,
+    featureNames: featureNamesForMode(featureMode, window.length),
+    features,
+    window,
+    windowSamples: window.length,
+    strideSamples: getDatasetStrideSize(),
+    rateHz: state.settings.rateHz,
+    preprocessing: {
+      inputFilter: state.settings.inputFilter,
+      normalizeMode: state.settings.normalizeMode,
+      inputWindowSamples: state.settings.inputWindowSamples,
+      inputAlpha: state.settings.inputAlpha,
+      inputMaWindow: state.settings.inputMaWindow,
+      inputIirOrder: state.settings.inputIirOrder,
+      inputIirLowHz: state.settings.inputIirLowHz,
+      inputIirHighHz: state.settings.inputIirHighHz
+    },
+    seqStart: window[0]?.seq ?? null,
+    seqEnd: window[window.length - 1]?.seq ?? null,
+    capturedAt: new Date().toISOString(),
+    reason
+  };
+  state.dataset.examples.push(example);
+  state.dataset.lastCaptureSeq = example.seqEnd;
+  el.datasetCaptureState.textContent = state.dataset.captureActive ? "Capturing" : "Captured";
+  renderDatasetView();
+  setUiEnabled();
+  return true;
+}
+
+function maybeCaptureDatasetWindow(latestSample) {
+  if (!state.dataset.captureActive) {
+    return;
+  }
+  const stride = getDatasetStrideSize();
+  const lastSeq = state.dataset.lastCaptureSeq;
+  if (lastSeq == null || latestSample.seq - lastSeq >= stride) {
+    captureDatasetWindow("stream");
+  }
+}
+
+function labelCounts() {
+  const counts = new Map();
+  for (const example of state.dataset.examples) {
+    counts.set(example.label, (counts.get(example.label) || 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+}
+
+function renderDatasetView() {
+  const examples = state.dataset.examples;
+  const counts = labelCounts();
+  const shape = getDatasetShape();
+  el.datasetSummary.textContent = `${examples.length} windows`;
+  el.datasetSizeState.textContent = `${formatDatasetSize(shape)} - ${shape.labels} labels`;
+  el.datasetFeatureState.textContent = examples.length > 0
+    ? `${shape.featureSize} features`
+    : `${shape.featureSize} planned`;
+  el.datasetCaptureState.textContent = state.dataset.captureActive ? "Capturing" : "Idle";
+  drawDatasetPreview();
+
+  el.datasetLabelList.replaceChildren(
+    ...(counts.length > 0 ? counts : [["No labels", 0]]).map(([label, count]) => {
+      const row = document.createElement("div");
+      row.className = "dataset-label-row";
+      const name = document.createElement("span");
+      name.textContent = label;
+      const value = document.createElement("strong");
+      value.textContent = String(count);
+      row.append(name, value);
+      return row;
+    })
+  );
+
+  el.datasetTableBody.replaceChildren(
+    ...examples.slice(-80).reverse().map((example) => {
+      const row = document.createElement("tr");
+      [example.id, example.label, example.windowSamples, example.featureMode, example.source].forEach((value) => {
+        const cell = document.createElement("td");
+        cell.textContent = String(value);
+        row.append(cell);
+      });
+      return row;
+    })
+  );
+}
+
+function drawDatasetPreview() {
+  if (!el.datasetPreviewCanvas) {
+    return;
+  }
+
+  const { ctx: previewCtx, width, height } = resizeAuxCanvasToDisplaySize(el.datasetPreviewCanvas, 180);
+  const windowSize = getDatasetWindowSize();
+  const source = el.datasetSourceSelect?.value || "PROCESSED";
+  const samples = getDatasetWindow(source);
+  el.datasetPreviewState.textContent = `${samples.length} / ${windowSize} samples`;
+
+  previewCtx.clearRect(0, 0, width, height);
+  previewCtx.fillStyle = "#ffffff";
+  previewCtx.fillRect(0, 0, width, height);
+
+  const pad = width < 560
+    ? { left: 40, right: 14, top: 18, bottom: 30 }
+    : { left: 54, right: 18, top: 18, bottom: 34 };
+  const plotWidth = width - pad.left - pad.right;
+  const plotHeight = height - pad.top - pad.bottom;
+  drawGridOn(previewCtx, width, height, pad, plotWidth, plotHeight);
+
+  if (samples.length < 2) {
+    previewCtx.fillStyle = "#637083";
+    previewCtx.font = "14px Segoe UI, Arial, sans-serif";
+    previewCtx.fillText("Waiting for IMU window data", pad.left + 12, pad.top + 32);
+    return;
+  }
+
+  const values = samples.flatMap((sample) => IMU_ACCEL_AXES.map((axis) => sample[axis]));
+  let minY = Math.min(...values);
+  let maxY = Math.max(...values);
+  const padding = Math.max(0.02, (maxY - minY) * 0.12);
+  minY -= padding;
+  maxY += padding;
+  if (Math.abs(maxY - minY) < 1e-6) {
+    minY -= 0.5;
+    maxY += 0.5;
+  }
+
+  for (const axis of IMU_ACCEL_AXES) {
+    drawDatasetPreviewLine(previewCtx, samples, axis, AXIS_COLORS[axis], minY, maxY, pad, plotWidth, plotHeight);
+  }
+
+  previewCtx.fillStyle = "#637083";
+  previewCtx.font = "11px Segoe UI, Arial, sans-serif";
+  previewCtx.fillText(`${maxY.toFixed(2)} ${getInputUnits()}`, 8, pad.top + 4);
+  previewCtx.fillText(`${minY.toFixed(2)} ${getInputUnits()}`, 8, height - pad.bottom);
+  drawLegendOn(previewCtx, [
+    { color: AXIS_COLORS.ax, label: "x" },
+    { color: AXIS_COLORS.ay, label: "y" },
+    { color: AXIS_COLORS.az, label: "z" }
+  ], pad.left + 8, pad.top + 18);
+}
+
+function drawDatasetPreviewLine(previewCtx, samples, axis, color, minY, maxY, pad, plotWidth, plotHeight) {
+  previewCtx.strokeStyle = color;
+  previewCtx.lineWidth = 2;
+  previewCtx.beginPath();
+  samples.forEach((sample, index) => {
+    const x = pad.left + (plotWidth * index) / Math.max(1, samples.length - 1);
+    const normalized = (sample[axis] - minY) / (maxY - minY);
+    const y = pad.top + plotHeight - normalized * plotHeight;
+    if (index === 0) {
+      previewCtx.moveTo(x, y);
+    } else {
+      previewCtx.lineTo(x, y);
+    }
+  });
+  previewCtx.stroke();
+}
+
+function toggleDatasetCapture() {
+  state.dataset.captureActive = !state.dataset.captureActive;
+  state.dataset.lastCaptureSeq = null;
+  el.datasetCaptureState.textContent = state.dataset.captureActive ? "Capturing" : "Idle";
+  setUiEnabled();
+}
+
+function clearDataset() {
+  state.dataset.examples = [];
+  state.dataset.nextId = 1;
+  state.dataset.lastCaptureSeq = null;
+  state.dataset.captureActive = false;
+  state.model.trained = null;
+  state.model.metrics = null;
+  state.model.trainingLog = [];
+  renderDatasetView();
+  renderModelView();
+  setUiEnabled();
+}
+
+function buildDatasetPayload() {
+  return {
+    type: "keti_window_dataset",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    board: "Arduino Nano 33 BLE Rev2",
+    examples: state.dataset.examples
+  };
+}
+
+function exportDatasetJson() {
+  downloadText("keti_imu_dataset", "json", JSON.stringify(buildDatasetPayload(), null, 2), "application/json;charset=utf-8");
+}
+
+function exportDatasetCsv() {
+  const header = [
+    "id",
+    "label",
+    "source",
+    "feature_mode",
+    "window_samples",
+    "seq_start",
+    "seq_end",
+    "rate_hz",
+    "captured_at",
+    "features"
+  ].join(",") + "\n";
+  const rows = state.dataset.examples.map((example) => [
+    example.id,
+    csvCell(example.label),
+    example.source,
+    example.featureMode,
+    example.windowSamples,
+    example.seqStart ?? "",
+    example.seqEnd ?? "",
+    example.rateHz,
+    example.capturedAt,
+    csvCell(example.features.join(" "))
+  ].join(","));
+  downloadText("keti_imu_dataset", "csv", header + rows.join("\n") + "\n", "text/csv;charset=utf-8");
+}
+
+async function importDatasetJson(event) {
+  const file = event.target.files?.[0];
+  if (!file) {
+    return;
+  }
+  try {
+    const payload = JSON.parse(await file.text());
+    const examples = Array.isArray(payload.examples) ? payload.examples : [];
+    state.dataset.examples = examples.filter((example) => Array.isArray(example.features) && example.label);
+    state.dataset.nextId = Math.max(0, ...state.dataset.examples.map((example) => Number(example.id) || 0)) + 1;
+    state.dataset.captureActive = false;
+    state.dataset.lastCaptureSeq = null;
+    renderDatasetView();
+    logLine(`DATASET_IMPORT,count=${state.dataset.examples.length}`);
+  } catch (error) {
+    logLine(`ERR,dataset_import,${error.message}`);
+  } finally {
+    event.target.value = "";
+    setUiEnabled();
+  }
+}
+
+function getTrainingDataset() {
+  const examples = state.dataset.examples.filter((example) => Array.isArray(example.features));
+  if (examples.length < 2) {
+    throw new Error("Need at least two captured windows");
+  }
+  const inputSize = examples[0].features.length;
+  if (!examples.every((example) => example.features.length === inputSize)) {
+    throw new Error("All dataset windows must use the same feature mode and window length");
+  }
+  const labels = [...new Set(examples.map((example) => example.label))].sort();
+  if (labels.length < 2) {
+    throw new Error("Need at least two labels");
+  }
+
+  const mean = Array(inputSize).fill(0);
+  const std = Array(inputSize).fill(0);
+  for (const example of examples) {
+    example.features.forEach((value, index) => {
+      mean[index] += value;
+    });
+  }
+  for (let i = 0; i < inputSize; i++) {
+    mean[i] /= examples.length;
+  }
+  for (const example of examples) {
+    example.features.forEach((value, index) => {
+      std[index] += (value - mean[index]) ** 2;
+    });
+  }
+  for (let i = 0; i < inputSize; i++) {
+    std[i] = Math.max(1e-6, Math.sqrt(std[i] / examples.length));
+  }
+
+  return {
+    examples,
+    labels,
+    inputSize,
+    mean,
+    std,
+    x: examples.map((example) => example.features.map((value, index) => (value - mean[index]) / std[index])),
+    y: examples.map((example) => labels.indexOf(example.label))
+  };
+}
+
+function randomWeight(scale) {
+  return (Math.random() * 2 - 1) * scale;
+}
+
+function initializeAnn(inputSize, hiddenLayers, neurons, outputSize, activation) {
+  const sizes = [inputSize, ...Array(hiddenLayers).fill(neurons), outputSize];
+  const layers = [];
+  for (let layer = 1; layer < sizes.length; layer++) {
+    const fanIn = sizes[layer - 1];
+    const fanOut = sizes[layer];
+    const scale = Math.sqrt(2 / Math.max(1, fanIn));
+    layers.push({
+      weights: Array.from({ length: fanOut }, () => Array.from({ length: fanIn }, () => randomWeight(scale))),
+      biases: Array(fanOut).fill(0)
+    });
+  }
+  return { sizes, activation, layers };
+}
+
+function activate(value, activation) {
+  if (activation === "tanh") {
+    return Math.tanh(value);
+  }
+  if (activation === "sigmoid") {
+    return 1 / (1 + Math.exp(-value));
+  }
+  return Math.max(0, value);
+}
+
+function activationDerivative(value, activation) {
+  if (activation === "tanh") {
+    const t = Math.tanh(value);
+    return 1 - t * t;
+  }
+  if (activation === "sigmoid") {
+    const s = 1 / (1 + Math.exp(-value));
+    return s * (1 - s);
+  }
+  return value > 0 ? 1 : 0;
+}
+
+function softmax(values) {
+  const max = Math.max(...values);
+  const exps = values.map((value) => Math.exp(value - max));
+  const sum = exps.reduce((acc, value) => acc + value, 0);
+  return exps.map((value) => value / Math.max(1e-12, sum));
+}
+
+function annForward(model, input) {
+  const activations = [input];
+  const preActivations = [];
+  let current = input;
+  model.layers.forEach((layer, layerIndex) => {
+    const z = layer.weights.map((row, neuron) => row.reduce((sum, weight, inputIndex) => (
+      sum + weight * current[inputIndex]
+    ), layer.biases[neuron]));
+    preActivations.push(z);
+    current = layerIndex === model.layers.length - 1
+      ? softmax(z)
+      : z.map((value) => activate(value, model.activation));
+    activations.push(current);
+  });
+  return { output: current, activations, preActivations };
+}
+
+function trainAnn(dataset, options) {
+  const model = initializeAnn(
+    dataset.inputSize,
+    options.hiddenLayers,
+    options.neurons,
+    dataset.labels.length,
+    options.activation
+  );
+  const history = [];
+  const indices = dataset.x.map((_, index) => index);
+
+  for (let epoch = 0; epoch < options.epochs; epoch++) {
+    shuffle(indices);
+    let lossSum = 0;
+    let correct = 0;
+    for (const exampleIndex of indices) {
+      const input = dataset.x[exampleIndex];
+      const labelIndex = dataset.y[exampleIndex];
+      const result = annForward(model, input);
+      const output = result.output;
+      lossSum += -Math.log(Math.max(1e-9, output[labelIndex]));
+      if (argMax(output) === labelIndex) {
+        correct++;
+      }
+
+      let delta = output.map((value, index) => value - (index === labelIndex ? 1 : 0));
+      for (let layerIndex = model.layers.length - 1; layerIndex >= 0; layerIndex--) {
+        const layer = model.layers[layerIndex];
+        const previousActivation = result.activations[layerIndex];
+        const oldWeights = layer.weights.map((row) => row.slice());
+        for (let neuron = 0; neuron < layer.weights.length; neuron++) {
+          for (let inputIndex = 0; inputIndex < layer.weights[neuron].length; inputIndex++) {
+            layer.weights[neuron][inputIndex] -= options.learningRate * delta[neuron] * previousActivation[inputIndex];
+          }
+          layer.biases[neuron] -= options.learningRate * delta[neuron];
+        }
+
+        if (layerIndex > 0) {
+          const nextDelta = Array(model.layers[layerIndex - 1].weights.length).fill(0);
+          for (let inputIndex = 0; inputIndex < nextDelta.length; inputIndex++) {
+            let sum = 0;
+            for (let neuron = 0; neuron < oldWeights.length; neuron++) {
+              sum += oldWeights[neuron][inputIndex] * delta[neuron];
+            }
+            nextDelta[inputIndex] = sum * activationDerivative(result.preActivations[layerIndex - 1][inputIndex], model.activation);
+          }
+          delta = nextDelta;
+        }
+      }
+    }
+    if (epoch === 0 || epoch === options.epochs - 1 || (epoch + 1) % Math.max(1, Math.floor(options.epochs / 8)) === 0) {
+      history.push({
+        epoch: epoch + 1,
+        loss: lossSum / dataset.x.length,
+        accuracy: correct / dataset.x.length
+      });
+    }
+  }
+  return { model, history };
+}
+
+function shuffle(values) {
+  for (let i = values.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [values[i], values[j]] = [values[j], values[i]];
+  }
+}
+
+function argMax(values) {
+  let bestIndex = 0;
+  for (let i = 1; i < values.length; i++) {
+    if (values[i] > values[bestIndex]) {
+      bestIndex = i;
+    }
+  }
+  return bestIndex;
+}
+
+function pruneAnn(model, sparsity) {
+  if (sparsity <= 0) {
+    return 0;
+  }
+  const weights = model.layers.flatMap((layer) => layer.weights.flatMap((row) => row.map((value) => Math.abs(value))));
+  if (weights.length === 0) {
+    return 0;
+  }
+  const sorted = [...weights].sort((a, b) => a - b);
+  const threshold = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * sparsity))];
+  let pruned = 0;
+  for (const layer of model.layers) {
+    for (const row of layer.weights) {
+      for (let i = 0; i < row.length; i++) {
+        if (Math.abs(row[i]) <= threshold) {
+          if (row[i] !== 0) {
+            pruned++;
+          }
+          row[i] = 0;
+        }
+      }
+    }
+  }
+  return pruned / weights.length;
+}
+
+function evaluateAnn(model, dataset) {
+  let correct = 0;
+  const confusion = dataset.labels.map(() => Array(dataset.labels.length).fill(0));
+  dataset.x.forEach((input, index) => {
+    const prediction = argMax(annForward(model, input).output);
+    const actual = dataset.y[index];
+    confusion[actual][prediction]++;
+    if (prediction === actual) {
+      correct++;
+    }
+  });
+  return {
+    accuracy: correct / dataset.x.length,
+    confusion
+  };
+}
+
+function countWeights(model) {
+  return model.layers.reduce((sum, layer) => (
+    sum + layer.weights.reduce((acc, row) => acc + row.length, 0)
+  ), 0);
+}
+
+function countNonzeroWeights(model) {
+  return model.layers.reduce((sum, layer) => (
+    sum + layer.weights.reduce((acc, row) => acc + row.filter((value) => value !== 0).length, 0)
+  ), 0);
+}
+
+function quantizeLayers(model) {
+  return model.layers.map((layer) => {
+    const flat = layer.weights.flat();
+    const maxAbs = Math.max(1e-9, ...flat.map((value) => Math.abs(value)));
+    const scale = maxAbs / 127;
+    return {
+      scale,
+      weights: layer.weights.map((row) => row.map((value) => Math.max(-128, Math.min(127, Math.round(value / scale))))),
+      biases: layer.biases.slice()
+    };
+  });
+}
+
+function getModelOptions() {
+  return {
+    hiddenLayers: Math.round(normalizeNumber(el.hiddenLayerInput.value, 1, 0, 4)),
+    neurons: Math.round(normalizeNumber(el.neuronInput.value, 16, 2, 128)),
+    activation: el.activationSelect.value,
+    learningRate: normalizeNumber(el.learningRateInput.value, 0.02, 0.0001, 1),
+    epochs: Math.round(normalizeNumber(el.epochInput.value, 120, 1, 2000)),
+    pruningSparsity: normalizeNumber(el.pruningInput.value, 0, 0, 0.95),
+    quantizedExport: el.quantizeToggle.checked
+  };
+}
+
+function getPlannedModelSizes() {
+  return getPlannedModelArchitecture().sizes;
+}
+
+function getPlannedModelArchitecture() {
+  const shape = getDatasetShape();
+  const options = getModelOptions();
+  const outputReady = shape.labels >= 2;
+  const sizes = [
+    shape.featureSize,
+    ...Array(options.hiddenLayers).fill(options.neurons),
+    outputReady ? shape.labels : 0
+  ];
+  return {
+    sizes,
+    outputReady,
+    labelCount: shape.labels
+  };
+}
+
+function layerName(index, layerCount) {
+  if (index === 0) {
+    return "Input";
+  }
+  if (index === layerCount - 1) {
+    return "Output";
+  }
+  return `Hidden ${index}`;
+}
+
+function formatNeuronCount(size, pending = false) {
+  if (pending) {
+    return "set labels first";
+  }
+  return `${size} neuron${size === 1 ? "" : "s"}`;
+}
+
+function formatArchitectureShape(sizes, outputPending = false) {
+  return sizes.map((size, index) => (
+    outputPending && index === sizes.length - 1 ? "labels" : String(size)
+  )).join(" -> ");
+}
+
+function drawArchitectureConnections(archCtx, fromNodes, toNodes, radius) {
+  const pairs = [];
+  const addPair = (fromIndex, toIndex) => {
+    const from = fromNodes[Math.max(0, Math.min(fromNodes.length - 1, fromIndex))];
+    const to = toNodes[Math.max(0, Math.min(toNodes.length - 1, toIndex))];
+    const key = `${from.x},${from.y},${to.x},${to.y}`;
+    if (!pairs.some((pair) => pair.key === key)) {
+      pairs.push({ from, to, key });
+    }
+  };
+
+  for (let index = 0; index < fromNodes.length; index++) {
+    const targetIndex = Math.round((index * Math.max(0, toNodes.length - 1)) / Math.max(1, fromNodes.length - 1));
+    addPair(index, targetIndex);
+  }
+  for (let index = 0; index < toNodes.length; index++) {
+    const sourceIndex = Math.round((index * Math.max(0, fromNodes.length - 1)) / Math.max(1, toNodes.length - 1));
+    addPair(sourceIndex, index);
+  }
+
+  for (const { from, to } of pairs) {
+    archCtx.beginPath();
+    archCtx.moveTo(from.x + radius, from.y);
+    archCtx.lineTo(to.x - radius, to.y);
+    archCtx.stroke();
+  }
+}
+
+function renderModelArchitecture() {
+  if (!el.modelArchitectureCanvas) {
+    return;
+  }
+
+  const planned = getPlannedModelArchitecture();
+  const trained = state.model.trained;
+  const sizes = trained?.sizes || planned.sizes;
+  const outputPending = !trained && !planned.outputReady;
+  const { ctx: archCtx, width, height } = resizeAuxCanvasToDisplaySize(el.modelArchitectureCanvas, 210);
+  archCtx.clearRect(0, 0, width, height);
+  archCtx.fillStyle = "#ffffff";
+  archCtx.fillRect(0, 0, width, height);
+
+  if (sizes.length < 2) {
+    archCtx.fillStyle = "#637083";
+    archCtx.font = "14px Segoe UI, Arial, sans-serif";
+    archCtx.fillText("Capture data to define model input/output", 18, 36);
+    return;
+  }
+
+  const pad = width < 620
+    ? { left: 46, right: 46, top: 38, bottom: 48 }
+    : { left: 62, right: 62, top: 42, bottom: 52 };
+  const layerGap = sizes.length === 1 ? 0 : (width - pad.left - pad.right) / Math.max(1, sizes.length - 1);
+  const maxVisibleNeurons = width < 620 ? 8 : 12;
+  const radius = width < 620 ? 5 : 6;
+  const layerNodes = sizes.map((size, layerIndex) => {
+    const visible = Math.max(1, Math.min(size, maxVisibleNeurons));
+    const usableHeight = height - pad.top - pad.bottom;
+    const spacing = visible <= 1 ? 0 : Math.min(20, usableHeight / Math.max(1, visible - 1));
+    const totalHeight = spacing * Math.max(0, visible - 1);
+    const startY = pad.top + usableHeight / 2 - totalHeight / 2;
+    const x = pad.left + layerGap * layerIndex;
+    return Array.from({ length: visible }, (_, nodeIndex) => ({
+      x,
+      y: startY + spacing * nodeIndex
+    }));
+  });
+
+  archCtx.save();
+  archCtx.globalAlpha = 0.24;
+  archCtx.strokeStyle = "#637083";
+  archCtx.lineWidth = 1;
+  for (let layerIndex = 0; layerIndex < layerNodes.length - 1; layerIndex++) {
+    drawArchitectureConnections(archCtx, layerNodes[layerIndex], layerNodes[layerIndex + 1], radius);
+  }
+  archCtx.restore();
+
+  sizes.forEach((size, layerIndex) => {
+    const nodes = layerNodes[layerIndex];
+    const isOutput = layerIndex === sizes.length - 1;
+    const isInput = layerIndex === 0;
+    const pendingOutput = outputPending && isOutput;
+    const fill = isInput ? "#008c8c" : isOutput ? "#2767c9" : "#d28a00";
+    for (const node of nodes) {
+      archCtx.fillStyle = pendingOutput ? "#f2f5f8" : fill;
+      archCtx.beginPath();
+      archCtx.arc(node.x, node.y, radius, 0, Math.PI * 2);
+      archCtx.fill();
+      archCtx.strokeStyle = pendingOutput ? "#9aa8b7" : "#ffffff";
+      archCtx.lineWidth = pendingOutput ? 1.8 : 1.5;
+      archCtx.stroke();
+    }
+    if (size > nodes.length) {
+      archCtx.fillStyle = "#637083";
+      archCtx.font = "12px Segoe UI, Arial, sans-serif";
+      archCtx.textAlign = "center";
+      archCtx.fillText(`+${size - nodes.length}`, nodes[0].x, height - pad.bottom + 2);
+    }
+    archCtx.fillStyle = "#17202a";
+    archCtx.font = "700 12px Segoe UI, Arial, sans-serif";
+    archCtx.textAlign = "center";
+    archCtx.fillText(layerName(layerIndex, sizes.length), nodes[0].x, 18);
+    archCtx.fillStyle = "#637083";
+    archCtx.font = "12px Segoe UI, Arial, sans-serif";
+    archCtx.fillText(formatNeuronCount(size, pendingOutput), nodes[0].x, height - 18);
+  });
+  archCtx.textAlign = "start";
+}
+
+function trainBrowserModel() {
+  try {
+    const dataset = getTrainingDataset();
+    const options = getModelOptions();
+    el.modelStatus.textContent = "Training";
+    renderModelLog(["Training started"]);
+    const { model, history } = trainAnn(dataset, options);
+    const actualSparsity = pruneAnn(model, options.pruningSparsity);
+    const metrics = evaluateAnn(model, dataset);
+    state.model = {
+      trained: {
+        type: "keti_browser_ann",
+        version: 1,
+        createdAt: new Date().toISOString(),
+        options,
+        labels: dataset.labels,
+        inputSize: dataset.inputSize,
+        inputMean: dataset.mean,
+        inputStd: dataset.std,
+        featureNames: dataset.examples[0].featureNames || featureNamesForMode(dataset.examples[0].featureMode, dataset.examples[0].windowSamples),
+        featureMode: dataset.examples[0].featureMode,
+        windowSamples: dataset.examples[0].windowSamples,
+        source: dataset.examples[0].source,
+        preprocessing: dataset.examples[0].preprocessing,
+        sizes: model.sizes,
+        activation: model.activation,
+        layers: model.layers,
+        quantizedLayers: options.quantizedExport ? quantizeLayers(model) : null
+      },
+      labels: dataset.labels,
+      inputSize: dataset.inputSize,
+      metrics: {
+        ...metrics,
+        examples: dataset.examples.length,
+        totalWeights: countWeights(model),
+        nonzeroWeights: countNonzeroWeights(model),
+        actualSparsity
+      },
+      trainingLog: history
+    };
+    renderModelView();
+    logLine(`MODEL_TRAINED,labels=${dataset.labels.length},input=${dataset.inputSize},acc=${metrics.accuracy.toFixed(3)}`);
+  } catch (error) {
+    el.modelStatus.textContent = "Error";
+    renderModelLog([`ERR ${error.message}`]);
+    logLine(`ERR,model_train,${error.message}`);
+  } finally {
+    setUiEnabled();
+  }
+}
+
+function renderModelView() {
+  const examples = state.dataset.examples.length;
+  const shape = getDatasetShape();
+  renderModelArchitecture();
+  if (!state.model.trained) {
+    const planned = getPlannedModelArchitecture();
+    el.modelStatus.textContent = examples > 1 && shape.labels >= 2
+      ? "Ready"
+      : shape.labels < 2 ? "Need labels" : "Need data";
+    el.modelShapeState.textContent = `${formatArchitectureShape(planned.sizes, !planned.outputReady)} planned`;
+    el.modelMetricState.textContent = formatDatasetSize(shape);
+    el.modelMetrics.replaceChildren(
+      metricRow("Input Dataset", formatDatasetSize(shape)),
+      metricRow("Windows", `${examples}`),
+      metricRow("Labels", shape.labels >= 2 ? `${shape.labels}` : `${shape.labels}/2 needed`),
+      metricRow("Window Samples", `${shape.windowSamples}`),
+      metricRow("Feature Mode", shape.featureMode)
+    );
+    renderModelLog(state.model.trainingLog.length ? state.model.trainingLog : ["Capture at least two labels, then train."]);
+    return;
+  }
+
+  const trained = state.model.trained;
+  const metrics = state.model.metrics;
+  el.modelStatus.textContent = "Trained";
+  el.modelShapeState.textContent = trained.sizes.join(" -> ");
+  el.modelMetricState.textContent = `${(metrics.accuracy * 100).toFixed(1)}%`;
+  el.modelMetrics.replaceChildren(
+    metricRow("Accuracy", `${(metrics.accuracy * 100).toFixed(1)}%`),
+    metricRow("Input Dataset", `${metrics.examples} x ${trained.inputSize} features`),
+    metricRow("Window Samples", `${trained.windowSamples}`),
+    metricRow("Labels", trained.labels.join(", ")),
+    metricRow("Weights", `${metrics.nonzeroWeights}/${metrics.totalWeights}`),
+    metricRow("Sparsity", `${(metrics.actualSparsity * 100).toFixed(1)}%`),
+    metricRow("Export", trained.quantizedLayers ? "int8 + float metadata" : "float arrays")
+  );
+  renderModelLog(state.model.trainingLog.map((item) => (
+    `epoch ${item.epoch}: loss=${item.loss.toFixed(4)}, acc=${(item.accuracy * 100).toFixed(1)}%`
+  )));
+}
+
+function metricRow(label, value) {
+  const row = document.createElement("div");
+  row.className = "metric-row";
+  const name = document.createElement("span");
+  name.textContent = label;
+  const number = document.createElement("strong");
+  number.textContent = value;
+  row.append(name, number);
+  return row;
+}
+
+function renderModelLog(lines) {
+  el.modelLog.textContent = lines.join("\n");
+}
+
+function exportModelJson() {
+  if (!state.model.trained) {
+    return;
+  }
+  downloadText("keti_browser_ann_model", "json", JSON.stringify(state.model.trained, null, 2), "application/json;charset=utf-8");
+}
+
+function arrayToC(name, values, type = "float") {
+  const formatted = values.map((value) => (
+    type === "float" ? `${Number(value).toPrecision(8)}f` : String(value)
+  ));
+  const rows = [];
+  for (let i = 0; i < formatted.length; i += 12) {
+    rows.push(`  ${formatted.slice(i, i + 12).join(", ")}`);
+  }
+  return `static const ${type} ${name}[${values.length}] = {\n${rows.join(",\n")}\n};`;
+}
+
+function exportCArray() {
+  const model = state.model.trained;
+  if (!model) {
+    return;
+  }
+  const lines = [
+    "#ifndef KETI_BROWSER_ANN_MODEL_H",
+    "#define KETI_BROWSER_ANN_MODEL_H",
+    "",
+    "#include <stdint.h>",
+    "",
+    `#define KETI_MODEL_INPUT_SIZE ${model.inputSize}`,
+    `#define KETI_MODEL_OUTPUT_SIZE ${model.labels.length}`,
+    `#define KETI_MODEL_LAYER_COUNT ${model.layers.length}`,
+    "",
+    arrayToC("keti_model_input_mean", model.inputMean),
+    "",
+    arrayToC("keti_model_input_std", model.inputStd),
+    "",
+    `static const char* keti_model_labels[${model.labels.length}] = { ${model.labels.map((label) => `"${label.replace(/\\/g, "\\\\").replace(/"/g, "\\\"")}"`).join(", ")} };`,
+    ""
+  ];
+
+  model.layers.forEach((layer, index) => {
+    const rows = layer.weights.length;
+    const cols = layer.weights[0]?.length || 0;
+    lines.push(`#define KETI_LAYER_${index}_ROWS ${rows}`);
+    lines.push(`#define KETI_LAYER_${index}_COLS ${cols}`);
+    if (model.quantizedLayers) {
+      const quant = model.quantizedLayers[index];
+      lines.push(`static const float keti_layer_${index}_weight_scale = ${quant.scale.toPrecision(8)}f;`);
+      lines.push(arrayToC(`keti_layer_${index}_weights_q`, quant.weights.flat(), "int8_t"));
+    } else {
+      lines.push(arrayToC(`keti_layer_${index}_weights`, layer.weights.flat()));
+    }
+    lines.push(arrayToC(`keti_layer_${index}_biases`, layer.biases));
+    lines.push("");
+  });
+
+  lines.push("#endif");
+  downloadText("keti_browser_ann_model", "h", lines.join("\n"), "text/x-chdr;charset=utf-8");
+}
+
+function downloadText(stem, extension, text, type) {
+  const blob = new Blob([text], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  link.href = url;
+  link.download = `${stem}_${stamp}.${extension}`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function populateFirmwareSelect(firmwares) {
+  const previous = el.firmwareSelect.value || "stage1_lab_console";
+  const list = firmwares.length > 0 ? firmwares : DEFAULT_PREBUILT_FIRMWARES;
+
+  el.firmwareSelect.replaceChildren(
+    ...list.map((firmware) => {
+      const option = document.createElement("option");
+      option.value = firmware.id;
+      option.textContent = `${firmware.id} v${firmware.version || "unknown"}`;
+      option.dataset.fqbn = firmware.fqbn || "";
+      return option;
+    })
+  );
+
+  if ([...el.firmwareSelect.options].some((option) => option.value === previous)) {
+    el.firmwareSelect.value = previous;
+  }
+}
+
+async function loadDirectFirmwareManifest() {
+  for (const manifestPath of DIRECT_MANIFEST_PATHS) {
+    try {
+      const response = await fetch(manifestPath, { cache: "no-store" });
+      if (!response.ok) {
+        continue;
+      }
+      const payload = await response.json();
+      if (!Array.isArray(payload.firmware)) {
+        continue;
+      }
+      state.flash.directFirmwares = payload.firmware;
+      state.flash.directBasePath = manifestPath.replace(/manifest\.json$/i, "");
+      populateFirmwareSelect(state.flash.directFirmwares);
+      logLine(`DIRECT_MANIFEST,${manifestPath},items=${payload.firmware.length}`);
+      return;
+    } catch (error) {
+      // Try the next static firmware manifest path.
+    }
+  }
+
+  state.flash.directFirmwares = DEFAULT_PREBUILT_FIRMWARES;
+  populateFirmwareSelect(state.flash.directFirmwares);
+  logLine("DIRECT_MANIFEST,default");
+}
+
+function getSelectedFirmware() {
+  const firmwareId = el.firmwareSelect.value || "stage1_lab_console";
+  const candidates = [
+    ...state.flash.directFirmwares,
+    ...DEFAULT_PREBUILT_FIRMWARES
+  ];
+  return candidates.find((firmware) => firmware.id === firmwareId) || DEFAULT_PREBUILT_FIRMWARES[0];
+}
+
+async function fetchFirmwareBytes(firmware) {
+  const directories = [
+    state.flash.directBasePath,
+    "firmware/prebuilt/",
+    "../firmware/prebuilt/"
+  ].filter(Boolean);
+  const uniqueDirectories = [...new Set(directories)];
+
+  for (const directory of uniqueDirectories) {
+    try {
+      const baseUrl = new URL(directory, window.location.href);
+      const firmwareUrl = new URL(firmware.file, baseUrl);
+      const response = await fetch(firmwareUrl.href, { cache: "no-store" });
+      if (!response.ok) {
+        continue;
+      }
+      const buffer = await response.arrayBuffer();
+      return {
+        bytes: new Uint8Array(buffer),
+        source: firmwareUrl.href
+      };
+    } catch (error) {
+      // Try the next static firmware location.
+    }
+  }
+
+  throw new Error("Could not load static firmware from the prebuilt assets");
+}
+
+async function sha256Hex(bytes) {
+  if (!crypto.subtle) {
+    throw new Error("SHA-256 verification requires Web Crypto support");
+  }
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("")
+    .toUpperCase();
+}
+
+async function verifyFirmwareBytes(bytes, firmware) {
+  if (firmware.size_bytes && bytes.length !== Number(firmware.size_bytes)) {
+    throw new Error(`Firmware size mismatch: expected ${firmware.size_bytes}, got ${bytes.length}`);
+  }
+
+  if (firmware.sha256) {
+    const actual = await sha256Hex(bytes);
+    const expected = String(firmware.sha256).toUpperCase();
+    if (actual !== expected) {
+      throw new Error(`Firmware SHA-256 mismatch: ${actual}`);
+    }
+  }
+}
+
+async function loadDirectFirmwareBytes(firmware) {
+  const loaded = await fetchFirmwareBytes(firmware);
+  const bytes = loaded.bytes;
+  const source = loaded.source;
+
+  await verifyFirmwareBytes(bytes, firmware);
+  return { bytes, source };
+}
+
+function setDirectFlashProgress(percent, message) {
+  el.flashProgress.value = Math.max(0, Math.min(100, percent));
+  if (message) {
+    el.flashState.textContent = message;
+  }
+}
+
+function isArduinoSerialPort(port) {
+  if (!port || typeof port.getInfo !== "function") {
+    return true;
+  }
+  const info = port.getInfo();
+  return info.usbVendorId === 0x2341 || info.usbVendorId === 0x2a03;
+}
+
+async function getGrantedArduinoSerialPorts(excludedPort = null) {
+  if (!navigator.serial.getPorts) {
+    return [];
+  }
+  const ports = await navigator.serial.getPorts();
+  return ports.filter((port) => port !== excludedPort && isArduinoSerialPort(port));
+}
+
+async function waitForGrantedBootloaderPort(appPort) {
+  const start = performance.now();
+  while (performance.now() - start < BOOTLOADER_REENUMERATE_WAIT_MS) {
+    const ports = await getGrantedArduinoSerialPorts(appPort);
+    if (ports.length === 1) {
+      return ports[0];
+    }
+    if (ports.length > 1) {
+      logLine(`DIRECT_FLASH,bootloader_auto_ambiguous,count=${ports.length}`);
+      return null;
+    }
+    await sleep(BOOTLOADER_POLL_INTERVAL_MS);
+  }
+  return null;
+}
+
+async function requestArduinoSerialPort() {
+  return navigator.serial.requestPort({
+    filters: window.KetiDirectFlash.ARDUINO_USB_FILTERS
+  });
+}
+
+async function stopActiveSessionBeforeBootloader() {
+  const existingPort = state.port;
+  if (!state.connected) {
+    return null;
+  }
+
+  setDirectFlashProgress(1, "Stopping stream");
+  if (state.writer) {
+    try {
+      await sendCommand("CLS OFF");
+      await sleep(80);
+    } catch (error) {
+      logLine(`ERR,bootloader_cls_off,${error.message}`);
+    }
+    try {
+      await sendCommand("STOP");
+      await sleep(150);
+    } catch (error) {
+      logLine(`ERR,bootloader_stop,${error.message}`);
+    }
+  }
+
+  state.streaming = false;
+  state.recording = false;
+  state.classification.active = false;
+  await disconnectDevice();
+  await sleep(350);
+  return existingPort;
+}
+
+async function touchApplicationPortIntoBootloader() {
+  let appPort = await stopActiveSessionBeforeBootloader();
+  if (!appPort) {
+    setDirectFlashProgress(0, "Select app port");
+    appPort = await requestArduinoSerialPort();
+  }
+
+  setDirectFlashProgress(2, "Force reset");
+  try {
+    await window.KetiDirectFlash.forceSerialReset(appPort);
+    logLine("DIRECT_FLASH,force_reset");
+  } catch (error) {
+    logLine(`ERR,direct_force_reset,${error.message}`);
+    setDirectFlashProgress(2, "Select app port");
+    appPort = await requestArduinoSerialPort();
+  }
+
+  setDirectFlashProgress(4, "Bootloader touch");
+  try {
+    await window.KetiDirectFlash.touch1200BpsReset(appPort);
+  } catch (error) {
+    logLine(`ERR,direct_touch_after_reset,${error.message}`);
+    setDirectFlashProgress(4, "Select app port");
+    appPort = await requestArduinoSerialPort();
+    await window.KetiDirectFlash.touch1200BpsReset(appPort);
+  }
+
+  state.flash.directBootloaderTouched = true;
+  logLine("DIRECT_FLASH,bootloader_touch_1200bps");
+  return appPort;
+}
+
+async function enterBootloaderAndResolvePort() {
+  const appPort = await touchApplicationPortIntoBootloader();
+
+  setDirectFlashProgress(6, "Finding bootloader");
+  const grantedBootloaderPort = await waitForGrantedBootloaderPort(appPort);
+  if (grantedBootloaderPort) {
+    logLine("DIRECT_FLASH,bootloader_auto_port");
+    return grantedBootloaderPort;
+  }
+
+  setDirectFlashProgress(6, "Select bootloader");
+  logLine("DIRECT_FLASH,bootloader_manual_select_required");
+  return requestArduinoSerialPort();
+}
+
+function isDirectBootloaderError(error) {
+  const message = String(error?.message || "");
+  return /bootloader|SAM-BA|N# ack|Unexpected bootloader target|Arduino extension|Timed out waiting/i.test(message);
+}
+
+function createDirectFlashTimeoutError(kind, attemptLabel, timeoutMs) {
+  const error = new Error(`Direct flash ${attemptLabel} ${kind} timeout after ${timeoutMs} ms`);
+  error.name = "DirectFlashTimeoutError";
+  error.directFlashTimeout = true;
+  error.timeoutKind = kind;
+  error.attemptLabel = attemptLabel;
+  error.timeoutMs = timeoutMs;
+  return error;
+}
+
+function isDirectFlashTimeoutError(error) {
+  const message = String(error?.message || "");
+  return Boolean(error?.directFlashTimeout) || /Direct flash .* timeout after|Writing page .* failed: .*timed out|Writing bootloader .*timed out/i.test(message);
+}
+
+function isMidFlashTimeoutLikeError(error, lastProgressMessage) {
+  const message = String(error?.message || "");
+  const progress = String(lastProgressMessage || "");
+  return /timed out|timeout|Transport closed/i.test(message) &&
+    /Preparing flash|Erasing flash|Writing page|Wrote page|Resetting board/i.test(progress);
+}
+
+function asDirectFlashTimeoutError(error, attemptLabel, lastProgressMessage) {
+  if (isDirectFlashTimeoutError(error)) {
+    return error;
+  }
+  if (!isMidFlashTimeoutLikeError(error, lastProgressMessage)) {
+    return error;
+  }
+  const wrapped = createDirectFlashTimeoutError("operation", attemptLabel, DIRECT_FLASH_STALL_TIMEOUT_MS);
+  wrapped.message = `${wrapped.message}: ${error.message}`;
+  wrapped.cause = error;
+  return wrapped;
+}
+
+function createDirectFlasher(attemptLabel, onProgress = null) {
+  return new window.KetiDirectFlash.DirectSamBaFlasher({
+    onLog: (message) => logLine(`DIRECT_FLASH,${attemptLabel},${message}`),
+    onProgress: (item) => {
+      setDirectFlashProgress(item.percent, item.message);
+      if (onProgress) {
+        onProgress(item);
+      }
+    }
+  });
+}
+
+async function closeDirectFlasher(flasher, reason) {
+  if (!flasher || typeof flasher.close !== "function") {
+    return;
+  }
+  try {
+    await Promise.race([
+      flasher.close(),
+      sleep(DIRECT_FLASH_CLOSE_TIMEOUT_MS).then(() => {
+        throw new Error(`close timeout after ${DIRECT_FLASH_CLOSE_TIMEOUT_MS} ms`);
+      })
+    ]);
+    logLine(`DIRECT_FLASH,closed,reason=${reason}`);
+  } catch (error) {
+    logLine(`ERR,direct_flash_close,${error.message}`);
+  }
+}
+
+async function runTimedDirectOperation({ port, firmwareBytes, attemptLabel, operation = "flash", skipErase = false }) {
+  let stallTimer = null;
+  let totalTimer = null;
+  let rejectForTimeout = null;
+  let timeoutError = null;
+  let lastProgressMessage = "";
+
+  const clearTimers = () => {
+    clearTimeout(stallTimer);
+    clearTimeout(totalTimer);
+    stallTimer = null;
+    totalTimer = null;
+  };
+
+  const signalTimeout = (error) => {
+    if (timeoutError) {
+      return;
+    }
+    timeoutError = error;
+    logLine(`DIRECT_FLASH_TIMEOUT,attempt=${attemptLabel},kind=${error.timeoutKind},ms=${error.timeoutMs}`);
+    if (rejectForTimeout) {
+      rejectForTimeout(error);
+    }
+  };
+
+  const resetStallTimer = () => {
+    clearTimeout(stallTimer);
+    stallTimer = setTimeout(() => {
+      signalTimeout(createDirectFlashTimeoutError("stall", attemptLabel, DIRECT_FLASH_STALL_TIMEOUT_MS));
+    }, DIRECT_FLASH_STALL_TIMEOUT_MS);
+  };
+
+  const timeoutPromise = new Promise((_, reject) => {
+    rejectForTimeout = reject;
+  });
+
+  const flasher = createDirectFlasher(attemptLabel, (item) => {
+    lastProgressMessage = item.message || "";
+    resetStallTimer();
+  });
+  resetStallTimer();
+  totalTimer = setTimeout(() => {
+    signalTimeout(createDirectFlashTimeoutError("total", attemptLabel, DIRECT_FLASH_TOTAL_TIMEOUT_MS));
+  }, DIRECT_FLASH_TOTAL_TIMEOUT_MS);
+
+  const operationPromise = operation === "erase"
+    ? flasher.eraseApplication({
+      port,
+      firmwareBytes,
+      maxSketchSize: window.KetiDirectFlash.MAX_SKETCH_SIZE
+    })
+    : flasher.flash({
+      port,
+      firmwareBytes,
+      maxSketchSize: window.KetiDirectFlash.MAX_SKETCH_SIZE,
+      skipErase
+    });
+
+  try {
+    await Promise.race([operationPromise, timeoutPromise]);
+  } catch (error) {
+    const normalizedError = asDirectFlashTimeoutError(error, attemptLabel, lastProgressMessage);
+    if (isDirectFlashTimeoutError(normalizedError)) {
+      const timeoutState = operation === "erase"
+        ? "Erase timeout"
+        : attemptLabel === "recovery" ? "Recovery timeout" : "Flash timeout";
+      setDirectFlashProgress(0, timeoutState);
+      await closeDirectFlasher(flasher, `timeout_${attemptLabel}`);
+      operationPromise.catch((operationError) => {
+        logLine(`ERR,direct_flash_late_reject,${operationError.message}`);
+      });
+    }
+    throw normalizedError;
+  } finally {
+    clearTimers();
+  }
+}
+
+async function runTimedDirectErase({ port, firmwareBytes, attemptLabel }) {
+  await runTimedDirectOperation({
+    port,
+    firmwareBytes,
+    attemptLabel,
+    operation: "erase"
+  });
+}
+
+async function runTimedDirectFlash({ port, firmwareBytes, attemptLabel, skipErase = false }) {
+  await runTimedDirectOperation({
+    port,
+    firmwareBytes,
+    attemptLabel,
+    operation: "flash",
+    skipErase
+  });
+}
+
+async function probeRecoveryBootloaderPort(port, source) {
+  try {
+    await window.KetiDirectFlash.probeBootloaderPort(port, {
+      onLog: (message) => logLine(`DIRECT_FLASH,recovery_probe_${source},${message}`),
+      onProgress: ({ percent, message }) => setDirectFlashProgress(Math.min(8, percent), message)
+    });
+    logLine(`DIRECT_FLASH_RECOVERY,bootloader_port=${source}`);
+    return true;
+  } catch (error) {
+    logLine(`ERR,direct_recovery_probe_${source},${error.message}`);
+    return false;
+  }
+}
+
+async function findGrantedRecoveryBootloaderPort() {
+  const ports = await getGrantedArduinoSerialPorts();
+  for (let index = 0; index < ports.length; index++) {
+    setDirectFlashProgress(1, `Recovery probe ${index + 1}/${ports.length}`);
+    if (await probeRecoveryBootloaderPort(ports[index], `granted_${index + 1}`)) {
+      return ports[index];
+    }
+  }
+  return null;
+}
+
+async function touchRecoveryPortIntoBootloader(port) {
+  setDirectFlashProgress(2, "Recovery reset");
+  try {
+    await window.KetiDirectFlash.forceSerialReset(port);
+    logLine("DIRECT_FLASH_RECOVERY,force_reset");
+  } catch (error) {
+    logLine(`ERR,direct_recovery_force_reset,${error.message}`);
+  }
+
+  setDirectFlashProgress(4, "Recovery touch");
+  await window.KetiDirectFlash.touch1200BpsReset(port);
+  state.flash.directBootloaderTouched = true;
+  logLine("DIRECT_FLASH_RECOVERY,bootloader_touch_1200bps");
+
+  setDirectFlashProgress(6, "Recovery finding bootloader");
+  const grantedBootloaderPort = await waitForGrantedBootloaderPort(port);
+  if (grantedBootloaderPort) {
+    logLine("DIRECT_FLASH_RECOVERY,bootloader_auto_port");
+    return grantedBootloaderPort;
+  }
+
+  setDirectFlashProgress(6, "Recovery select bootloader");
+  logLine("DIRECT_FLASH_RECOVERY,manual_bootloader_select_required");
+  return requestArduinoSerialPort();
+}
+
+async function selectRecoveryBootloaderPort() {
+  const grantedBootloaderPort = await findGrantedRecoveryBootloaderPort();
+  if (grantedBootloaderPort) {
+    return grantedBootloaderPort;
+  }
+
+  setDirectFlashProgress(0, "Recovery select port");
+  const selectedPort = await requestArduinoSerialPort();
+  if (await probeRecoveryBootloaderPort(selectedPort, "selected")) {
+    return selectedPort;
+  }
+
+  return touchRecoveryPortIntoBootloader(selectedPort);
+}
+
+async function resolvePostEraseBootloaderPort(previousPort) {
+  setDirectFlashProgress(11, "Erase settle");
+  await sleep(DIRECT_FLASH_POST_ERASE_SETTLE_MS);
+
+  if (await probeRecoveryBootloaderPort(previousPort, "post_erase_same")) {
+    return previousPort;
+  }
+
+  const grantedBootloaderPort = await findGrantedRecoveryBootloaderPort();
+  if (grantedBootloaderPort) {
+    return grantedBootloaderPort;
+  }
+
+  setDirectFlashProgress(11, "Select bootloader");
+  logLine("DIRECT_FLASH,post_erase_manual_select_required");
+  const selectedPort = await requestArduinoSerialPort();
+  if (await probeRecoveryBootloaderPort(selectedPort, "post_erase_selected")) {
+    return selectedPort;
+  }
+
+  return touchRecoveryPortIntoBootloader(selectedPort);
+}
+
+async function runDirectFlashWithPreErase({ port, firmwareBytes, attemptLabel }) {
+  if (!DIRECT_FLASH_SEPARATE_ERASE) {
+    await runTimedDirectFlash({
+      port,
+      firmwareBytes,
+      attemptLabel
+    });
+    return;
+  }
+
+  await runTimedDirectErase({
+    port,
+    firmwareBytes,
+    attemptLabel: `${attemptLabel}_erase`
+  });
+  const writePort = await resolvePostEraseBootloaderPort(port);
+  await runTimedDirectFlash({
+    port: writePort,
+    firmwareBytes,
+    attemptLabel,
+    skipErase: true
+  });
+}
+
+async function runRecoveryFlashAfterTimeout({ loaded, firmware, reason }) {
+  logLine(`DIRECT_FLASH_RECOVERY,start,firmware=${firmware.id},reason=${reason.message}`);
+  state.flash.directBootloaderTouched = false;
+  setDirectFlashProgress(0, "Recovery flash");
+  const recoveryPort = await selectRecoveryBootloaderPort();
+  await runDirectFlashWithPreErase({
+    port: recoveryPort,
+    firmwareBytes: loaded.bytes,
+    attemptLabel: "recovery"
+  });
+  state.flash.directBootloaderTouched = false;
+  setDirectFlashProgress(100, "Recovery OK");
+  logLine(`DIRECT_FLASH_RECOVERY_OK,firmware=${firmware.id}`);
+}
+
+async function enterBootloaderDirect() {
+  if (!("serial" in navigator) || !window.KetiDirectFlash) {
+    setDirectFlashProgress(0, "Unavailable");
+    logLine("ERR,direct_flash,web_serial_unavailable");
+    return;
+  }
+
+  state.flash.directBusy = true;
+  setDirectFlashProgress(0, "Select app port");
+  setUiEnabled();
+
+  try {
+    await touchApplicationPortIntoBootloader();
+    setDirectFlashProgress(5, "Select bootloader");
+  } catch (error) {
+    state.flash.directBootloaderTouched = false;
+    setDirectFlashProgress(0, "Bootloader failed");
+    logLine(`ERR,direct_bootloader,${error.message}`);
+  } finally {
+    state.flash.directBusy = false;
+    setUiEnabled();
+  }
+}
+
+async function flashFirmware() {
+  if (!("serial" in navigator) || !window.KetiDirectFlash) {
+    setDirectFlashProgress(0, "Unavailable");
+    logLine("ERR,direct_flash,web_serial_unavailable");
+    return;
+  }
+
+  const firmware = getSelectedFirmware();
+  state.flash.directBusy = true;
+  setDirectFlashProgress(0, "Loading BIN");
+  setUiEnabled();
+
+  try {
+    const loaded = await loadDirectFirmwareBytes(firmware);
+    logLine(`DIRECT_FLASH,firmware=${firmware.id},bytes=${loaded.bytes.length},source=${loaded.source}`);
+
+    try {
+      setDirectFlashProgress(0, state.flash.directBootloaderTouched ? "Select bootloader" : "Select app port");
+      const port = state.flash.directBootloaderTouched
+        ? await requestArduinoSerialPort()
+        : await enterBootloaderAndResolvePort();
+
+      await runDirectFlashWithPreErase({
+        port,
+        firmwareBytes: loaded.bytes,
+        attemptLabel: "normal"
+      });
+    } catch (error) {
+      if (!isDirectFlashTimeoutError(error)) {
+        throw error;
+      }
+
+      try {
+        await runRecoveryFlashAfterTimeout({ loaded, firmware, reason: error });
+      } catch (recoveryError) {
+        const wrapped = new Error(`Recovery flash failed after timeout: ${recoveryError.message}`);
+        wrapped.recoveryFailed = true;
+        wrapped.cause = recoveryError;
+        throw wrapped;
+      }
+    }
+
+    state.flash.directBootloaderTouched = false;
+    if (el.flashState.textContent !== "Recovery OK") {
+      setDirectFlashProgress(100, "Flash OK");
+    }
+    logLine(`DIRECT_FLASH_OK,firmware=${firmware.id}`);
+  } catch (error) {
+    state.flash.directBootloaderTouched = false;
+    const status = error.recoveryFailed
+      ? "Recovery failed"
+      : isDirectFlashTimeoutError(error) ? "Flash timeout"
+      : isDirectBootloaderError(error) ? "Not bootloader" : "Flash failed";
+    setDirectFlashProgress(0, status);
+    logLine(`ERR,direct_flash,${error.message}`);
+  } finally {
+    state.flash.directBusy = false;
+    setUiEnabled();
+  }
+}
+
+async function sendCommand(command) {
+  if (!state.writer) {
+    throw new Error("Serial writer is not available.");
+  }
+  logLine(command, "tx");
+  await state.writer.write(new TextEncoder().encode(`${command}\n`));
+}
+
+async function connectDevice() {
+  if (!("serial" in navigator)) {
+    setStatus(el.browserStatus, "Web Serial unavailable", "error");
+    logLine("This browser does not support Web Serial.");
+    return;
+  }
+
+  try {
+    state.port = await navigator.serial.requestPort();
+    await state.port.open({ baudRate: 115200 });
+    state.writer = state.port.writable.getWriter();
+    state.reader = state.port.readable.getReader();
+    state.connected = true;
+    state.readLoopActive = true;
+    setUiEnabled();
+    readLoop();
+    await sleep(700);
+    await sendCommand("PING");
+    await sendCommand("STATUS");
+  } catch (error) {
+    logLine(`ERR,connect,${error.message}`);
+    await disconnectDevice();
+  }
+}
+
+async function disconnectDevice() {
+  try {
+    state.readLoopActive = false;
+    state.streaming = false;
+    state.recording = false;
+    if (state.writer) {
+      try {
+        await sendCommand("STOP");
+      } catch (error) {
+        logLine(`ERR,stop_on_disconnect,${error.message}`);
+      }
+      state.writer.releaseLock();
+    }
+    if (state.reader) {
+      await state.reader.cancel();
+      state.reader.releaseLock();
+    }
+    if (state.port) {
+      await state.port.close();
+    }
+  } catch (error) {
+    logLine(`ERR,disconnect,${error.message}`);
+  } finally {
+    state.port = null;
+    state.reader = null;
+    state.writer = null;
+    state.connected = false;
+    setUiEnabled();
+  }
+}
+
+async function readLoop() {
+  const decoder = new TextDecoder();
+  while (state.readLoopActive && state.reader) {
+    try {
+      const { value, done } = await state.reader.read();
+      if (done) {
+        break;
+      }
+      if (value) {
+        consumeText(decoder.decode(value, { stream: true }));
+      }
+    } catch (error) {
+      if (state.readLoopActive) {
+        logLine(`ERR,read,${error.message}`);
+      }
+      break;
+    }
+  }
+}
+
+function consumeText(text) {
+  state.lineBuffer += text;
+  const lines = state.lineBuffer.split(/\r?\n/);
+  state.lineBuffer = lines.pop() ?? "";
+  for (const line of lines) {
+    const clean = line.trim();
+    if (clean.length > 0) {
+      handleLine(clean);
+    }
+  }
+}
+
+function isAdcStreamLine(line) {
+  return line.startsWith("DATA,") ||
+    line.startsWith("BUF,") ||
+    line.startsWith("FILT,") ||
+    line.startsWith("BLE_DATA,") ||
+    /^raw\s*:/i.test(line);
+}
+
+function handleLine(line) {
+  const isStreamData = isAdcStreamLine(line) || line.startsWith("IMU,") || line.startsWith("PPG,");
+  if (!isStreamData) {
+    logLine(line);
+  }
+
+  if (line.startsWith("ERR,EI_ACCEL_MODEL_REQUIRED")) {
+    state.classification.active = false;
+    state.classification.startPending = false;
+    el.classificationState.textContent = "Model missing";
+    setUiEnabled();
+    return;
+  }
+
+  if (line.startsWith("ERR,EI_RUN_CLASSIFIER") || line.startsWith("ERR,EI_SIGNAL_FROM_BUFFER")) {
+    state.classification.startPending = false;
+    el.classificationState.textContent = "Inference error";
+    setUiEnabled();
+    return;
+  }
+
+  if (isAdcStreamLine(line)) {
+    const samples = parseAdcLine(line);
+    if (samples.length > 0) {
+      samples.forEach(addSample);
+    }
+    return;
+  }
+
+  if (line.startsWith("IMU,")) {
+    const sample = parseImuLine(line);
+    if (sample) {
+      addImuSample(sample);
+    }
+    return;
+  }
+
+  if (line.startsWith("CLS,")) {
+    const result = parseClassificationLine(line);
+    if (result) {
+      updateClassification(result);
+    }
+    return;
+  }
+
+  if (line.startsWith("PPG,")) {
+    const sample = parseLivePpgLine(line);
+    if (sample) {
+      addLivePpgSample(sample);
+    }
+    return;
+  }
+
+  if (line.startsWith("HR,")) {
+    const result = parseLiveHrLine(line);
+    if (result) {
+      updateLiveHr(result);
+    }
+    return;
+  }
+
+  if (line.startsWith("STATUS,")) {
+    parseStatus(line);
+    return;
+  }
+
+  if (line.startsWith("ACK,START")) {
+    state.streaming = true;
+    setUiEnabled();
+    return;
+  }
+
+  if (line.startsWith("ACK,STOP")) {
+    state.streaming = false;
+    setUiEnabled();
+    return;
+  }
+
+  if (line.startsWith("ACK,CLS_ON")) {
+    state.classification.active = true;
+    state.classification.startPending = false;
+    el.classificationState.textContent = "Running";
+    setUiEnabled();
+    return;
+  }
+
+  if (line.startsWith("ACK,CLS_OFF")) {
+    state.classification.active = false;
+    state.classification.startPending = false;
+    el.classificationState.textContent = "Idle";
+    setUiEnabled();
+  }
+}
+
+function parseAdcLine(line) {
+  if (line.startsWith("DATA,")) {
+    const sample = parseDataLine(line);
+    return sample ? [sample] : [];
+  }
+  if (line.startsWith("BUF,")) {
+    return parseBufferLine(line);
+  }
+  if (line.startsWith("FILT,")) {
+    const sample = parseFilterLine(line);
+    return sample ? [sample] : [];
+  }
+  if (line.startsWith("BLE_DATA,")) {
+    const sample = parseBleDataLine(line);
+    return sample ? [sample] : [];
+  }
+  if (/^raw\s*:/i.test(line)) {
+    const sample = parseSerialPlotterLine(line);
+    return sample ? [sample] : [];
+  }
+  return [];
+}
+
+function normalizeAdcSample(sample) {
+  const raw = finiteOrNull(sample.raw);
+  const filtered = finiteOrNull(sample.filtered);
+  const millivolts = finiteOrNull(sample.millivolts);
+  return {
+    ...sample,
+    seq: finiteOrNull(sample.seq) ?? nextAdcSyntheticSeq(),
+    micros: finiteOrNull(sample.micros) ?? Math.round((state.receivedSamples / Math.max(1, state.settings.rateHz)) * 1000000),
+    channel: finiteOrNull(sample.channel) ?? state.settings.channel,
+    raw: raw ?? NaN,
+    millivolts: millivolts ?? rawToMillivolts(raw),
+    filtered: filtered ?? raw ?? NaN,
+    format: sample.format || "DATA",
+    formatDetail: sample.formatDetail || "",
+    valueUnit: sample.valueUnit || "count",
+    rawLabel: sample.rawLabel || "Raw",
+    filteredLabel: sample.filteredLabel || "Filtered",
+    receivedAt: Date.now()
+  };
+}
+
+function parseDataLine(line) {
+  const parts = line.split(",");
+  if (parts.length < 6) {
+    return null;
+  }
+  const raw = Number(parts[4]);
+  const millivolts = Number(parts[5]);
+  const filtered = Number(parts[6]);
+  return normalizeAdcSample({
+    seq: Number(parts[1]),
+    micros: Number(parts[2]),
+    channel: Number(parts[3]),
+    raw,
+    millivolts,
+    filtered: Number.isFinite(filtered) ? filtered : raw,
+    format: "DATA",
+    formatDetail: parts.length >= 7 ? "stage1" : "basic",
+    valueUnit: "count",
+    filteredLabel: parts.length >= 7 ? "Filtered" : "Raw copy"
+  });
+}
+
+function parseBufferLine(line) {
+  const parts = line.split(",");
+  if (parts.length < 4) {
+    return [];
+  }
+  const bufferSeq = Number(parts[1]);
+  const baseMicros = Number(parts[2]);
+  const intervalUs = Math.round(1000000 / Math.max(1, state.settings.rateHz));
+  return parts.slice(3).map((value, index) => {
+    const raw = Number(value);
+    if (!Number.isFinite(raw)) {
+      return null;
+    }
+    return normalizeAdcSample({
+      seq: Number.isFinite(bufferSeq) ? bufferSeq * 100 + index : nextAdcSyntheticSeq(),
+      micros: Number.isFinite(baseMicros) ? baseMicros + index * intervalUs : undefined,
+      channel: state.settings.channel,
+      raw,
+      millivolts: rawToMillivolts(raw),
+      filtered: raw,
+      format: "BUF",
+      formatDetail: `buf ${Number.isFinite(bufferSeq) ? bufferSeq : "--"}[${index}]`,
+      valueUnit: "count",
+      filteredLabel: "Raw copy",
+      bufferSeq: Number.isFinite(bufferSeq) ? bufferSeq : null,
+      bufferIndex: index
+    });
+  }).filter(Boolean);
+}
+
+function parseFilterLine(line) {
+  const parts = line.split(",");
+  if (parts.length < 6) {
+    return null;
+  }
+  const rawMv = Number(parts[4]);
+  const filteredMv = Number(parts[5]);
+  return normalizeAdcSample({
+    seq: Number(parts[1]),
+    micros: Number(parts[2]),
+    channel: state.settings.channel,
+    raw: rawMv,
+    millivolts: rawMv,
+    filtered: Number.isFinite(filteredMv) ? filteredMv : rawMv,
+    format: "FILT",
+    formatDetail: parts[3] || state.settings.filter,
+    valueUnit: "mV",
+    rawLabel: "Raw mV",
+    filteredLabel: "Filtered mV"
+  });
+}
+
+function parseBleDataLine(line) {
+  const parts = line.split(",");
+  if (parts.length < 3) {
+    return null;
+  }
+  const millis = Number(parts[1]);
+  const raw = Number(parts[2]);
+  if (!Number.isFinite(raw)) {
+    return null;
+  }
+  return normalizeAdcSample({
+    seq: nextAdcSyntheticSeq(),
+    micros: Number.isFinite(millis) ? millis * 1000 : undefined,
+    channel: state.settings.channel,
+    raw,
+    millivolts: rawToMillivolts(raw),
+    filtered: raw,
+    format: "BLE_DATA",
+    formatDetail: "serial mirror",
+    valueUnit: "count",
+    filteredLabel: "Raw copy"
+  });
+}
+
+function parseSerialPlotterLine(line) {
+  const values = {};
+  for (const token of line.split(",")) {
+    const separator = token.indexOf(":");
+    if (separator <= 0) {
+      continue;
+    }
+    const key = token.slice(0, separator).trim().toLowerCase();
+    const value = Number(token.slice(separator + 1).trim());
+    if (Number.isFinite(value)) {
+      values[key] = value;
+    }
+  }
+  if (!Number.isFinite(values.raw) && !Number.isFinite(values.filtered)) {
+    return null;
+  }
+  const seq = nextAdcSyntheticSeq();
+  const raw = Number.isFinite(values.raw) ? values.raw : values.filtered;
+  const filtered = Number.isFinite(values.filtered) ? values.filtered : raw;
+  return normalizeAdcSample({
+    seq,
+    micros: Math.round((seq / Math.max(1, state.settings.rateHz)) * 1000000),
+    channel: state.settings.channel,
+    raw,
+    millivolts: NaN,
+    filtered,
+    format: "PLOTTER",
+    formatDetail: "serial plotter",
+    valueUnit: "value"
+  });
+}
+
+function parseImuLine(line) {
+  const parts = line.split(",");
+  if (parts.length < 12) {
+    return null;
+  }
+  return {
+    seq: Number(parts[1]),
+    micros: Number(parts[2]),
+    ax: Number(parts[3]),
+    ay: Number(parts[4]),
+    az: Number(parts[5]),
+    gx: Number(parts[6]),
+    gy: Number(parts[7]),
+    gz: Number(parts[8]),
+    mx: Number(parts[9]),
+    my: Number(parts[10]),
+    mz: Number(parts[11]),
+    receivedAt: Date.now()
+  };
+}
+
+function parseClassificationLine(line) {
+  const parts = line.split(",");
+  if (parts.length < 5) {
+    return null;
+  }
+
+  const result = {
+    seq: Number(parts[1]),
+    millis: Number(parts[2]),
+    topLabel: parts[3],
+    topScore: Number(parts[4]),
+    scores: [],
+    timing: {},
+    anomaly: null,
+    updatedAt: Date.now()
+  };
+
+  for (const token of parts.slice(5)) {
+    const [key, value] = token.split("=");
+    if (key === "scores") {
+      result.scores = value.split("|").map((item) => {
+        const separator = item.lastIndexOf(":");
+        return {
+          label: separator >= 0 ? item.slice(0, separator) : item,
+          value: separator >= 0 ? Number(item.slice(separator + 1)) : 0
+        };
+      }).filter((item) => item.label);
+    } else if (key === "anomaly") {
+      result.anomaly = Number(value);
+    } else if (key && key.endsWith("_ms")) {
+      result.timing[key] = Number(value);
+    }
+  }
+
+  return result;
+}
+
+function parseKeyValueTokens(tokens) {
+  const values = {};
+  for (const token of tokens) {
+    const separator = token.indexOf("=");
+    if (separator <= 0) {
+      continue;
+    }
+    const key = token.slice(0, separator);
+    const value = token.slice(separator + 1);
+    const numeric = Number(value);
+    values[key] = Number.isFinite(numeric) ? numeric : value;
+  }
+  return values;
+}
+
+function parseLivePpgLine(line) {
+  const parts = line.split(",");
+  if (parts.length < 4) {
+    return null;
+  }
+  const seq = Number(parts[1]);
+  const micros = Number(parts[2]);
+  const raw = Number(parts[3]);
+  const filled = Number(parts[4]);
+  if (!Number.isFinite(seq) || !Number.isFinite(raw)) {
+    return null;
+  }
+  return {
+    seq,
+    micros: Number.isFinite(micros) ? micros : seq * (1000000 / 32),
+    tSec: Number.isFinite(micros) ? micros / 1000000 : seq / 32,
+    ppg: raw,
+    raw,
+    filtered: raw,
+    source: "raw",
+    filled: Number.isFinite(filled) ? filled : null,
+    receivedAt: Date.now()
+  };
+}
+
+function parseLiveHrLine(line) {
+  const parts = line.split(",");
+  if (parts.length < 4) {
+    return null;
+  }
+  const hr = Number(parts[3]);
+  const kv = parseKeyValueTokens(parts.slice(4));
+  return {
+    seq: Number(parts[1]),
+    millis: Number(parts[2]),
+    hrBpm: Number.isFinite(hr) ? hr : null,
+    quality: Number(kv.quality),
+    std: Number(kv.std),
+    acfBpm: Number(kv.acf_bpm),
+    acfScore: Number(kv.acf_score),
+    specBpm: Number(kv.spec_bpm),
+    specScore: Number(kv.spec_score),
+    window: Number(kv.window),
+    model: kv.model || "",
+    updatedAt: Date.now()
+  };
+}
+
+function parseStatus(line) {
+  const tokens = line.split(",").slice(1);
+  for (const token of tokens) {
+    const [key, value] = token.split("=");
+    if (key === "streaming") {
+      state.streaming = value === "1";
+    } else if (key === "classification") {
+      state.classification.active = value === "1";
+      state.classification.startPending = false;
+      renderClassification();
+    } else if (key === "rate_hz") {
+      state.settings.rateHz = Number(value);
+      el.rateInput.value = value;
+      updateAdcWindowInputFromSamples(state.settings.window);
+      if (state.ppg.source === "Live ADC" && state.ppg.samples.length === 0 && el.ppgSampleRateInput) {
+        state.ppg.sampleRateHz = state.settings.rateHz;
+        el.ppgSampleRateInput.value = value;
+      }
+    } else if (key === "channel") {
+      state.settings.channel = Number(value);
+      el.channelSelect.value = value;
+    } else if (key === "adc_bits") {
+      state.settings.resolution = Number(value);
+      el.resolutionSelect.value = value;
+    } else if (key === "filter") {
+      state.settings.dspProtocolHint = "STAGE1";
+      state.settings.filter = value;
+      el.filterSelect.value = value;
+      updateFilterStateText();
+    } else if (key === "mode") {
+      state.settings.dspProtocolHint = "DAY2_IIR";
+      const mappedMode = value === "RAW" ? "RAW" : `IIR_${value}`;
+      state.settings.filter = mappedMode;
+      if ([...el.filterSelect.options].some((option) => option.value === mappedMode)) {
+        el.filterSelect.value = mappedMode;
+      }
+      updateFilterStateText();
+    } else if (key === "alpha") {
+      state.settings.alpha = Number(value);
+      el.alphaInput.value = String(state.settings.alpha);
+      el.alphaOutput.textContent = state.settings.alpha.toFixed(3);
+    } else if (key === "window") {
+      updateAdcWindowInputFromSamples(Number(value));
+    } else if (key === "iir_order") {
+      state.settings.iirOrder = Number(value);
+      el.iirOrderInput.value = value;
+    } else if (key === "order") {
+      state.settings.iirOrder = Number(value);
+      el.iirOrderInput.value = value;
+    } else if (key === "iir_low_hz") {
+      state.settings.iirLowHz = Number(value);
+      el.iirLowInput.value = value;
+    } else if (key === "low") {
+      state.settings.iirLowHz = Number(value);
+      el.iirLowInput.value = value;
+    } else if (key === "iir_high_hz") {
+      state.settings.iirHighHz = Number(value);
+      el.iirHighInput.value = value;
+    } else if (key === "high") {
+      state.settings.iirHighHz = Number(value);
+      el.iirHighInput.value = value;
+    } else if (key === "rate") {
+      state.settings.rateHz = Number(value);
+      el.rateInput.value = value;
+      updateAdcWindowInputFromSamples(state.settings.window);
+    }
+  }
+  renderDspPanel({ writeBack: true });
+  setUiEnabled();
+}
+
+function addSample(sample) {
+  sample.format = sample.format || "DATA";
+  if (state.adcFormatCounts[sample.format] == null) {
+    state.adcFormatCounts[sample.format] = 0;
+  }
+  state.adcFormatCounts[sample.format] += 1;
+  state.samples.push(sample);
+  if (state.samples.length > MAX_POINTS) {
+    state.samples.shift();
+  }
+
+  state.receivedSamples++;
+  if (state.recording) {
+    state.records.push({ ...sample, kind: "adc", label: el.labelInput.value.trim() || "unlabeled" });
+  }
+
+  state.tableRows.unshift(sample);
+  if (state.tableRows.length > MAX_TABLE_ROWS) {
+    state.tableRows.pop();
+  }
+
+  state.latestSample = sample;
+  addAdcSampleToLivePpg(sample);
+  scheduleUiRender();
+}
+
+function addImuSample(sample) {
+  const processed = processImuSample(sample);
+  state.imuSamples.push(sample);
+  state.imuProcessedSamples.push(processed);
+  if (state.imuSamples.length > MAX_IMU_POINTS) {
+    state.imuSamples.shift();
+    state.imuProcessedSamples.shift();
+  }
+  state.receivedImuSamples++;
+  state.latestImu = sample;
+  state.latestProcessedImu = processed;
+  if (state.recording) {
+    state.records.push({
+      ...sample,
+      ...processed,
+      kind: "imu",
+      label: el.labelInput.value.trim() || "unlabeled",
+      preWindow: getInputWindowSize(),
+      preFilter: state.settings.inputFilter,
+      normalize: state.settings.normalizeMode
+    });
+  }
+  maybeCaptureDatasetWindow(sample);
+  scheduleUiRender();
+}
+
+function clearLivePpgWindow(signalSource = state.ppg.signalSource || "raw") {
+  state.ppg.samples = [];
+  state.ppg.analysis = null;
+  state.ppg.liveHr = null;
+  state.ppg.error = "";
+  state.ppg.source = "Live ADC";
+  state.ppg.signalSource = signalSource;
+  state.ppg.columns = ["seq", "micros", "raw", "filtered", "ppg", "source"];
+  state.ppg.liveStartMicros = null;
+  state.ppg.lastAutoAnalysisAt = 0;
+  state.ppg.lastAutoAnalysisSeq = null;
+}
+
+function resetPpgForLiveIfNeeded(signalSource = "raw") {
+  if (state.ppg.source !== "Live ADC" || state.ppg.signalSource !== signalSource) {
+    clearLivePpgWindow(signalSource);
+  }
+}
+
+function getAdcPpgSignal(sample) {
+  const useFiltered = state.settings.filter !== "RAW" && Number.isFinite(sample.filtered);
+  return {
+    value: useFiltered ? sample.filtered : sample.raw,
+    source: useFiltered ? "filtered" : "raw"
+  };
+}
+
+function updateLivePpgSampleRate(sample = null) {
+  const fallbackRate = normalizeNumber(state.settings.rateHz, state.ppg.sampleRateHz || 100, 1, 1000);
+  let nextRate = fallbackRate;
+  const previous = state.ppg.samples[state.ppg.samples.length - 1];
+  if (sample && previous && Number.isFinite(sample.micros) && Number.isFinite(previous.micros)) {
+    const deltaSec = (sample.micros - previous.micros) / 1000000;
+    if (deltaSec > 0 && deltaSec < 2) {
+      nextRate = normalizeNumber(1 / deltaSec, fallbackRate, 1, 1000);
+    }
+  }
+  state.ppg.sampleRateHz = nextRate;
+  if (el.ppgSampleRateInput && Math.abs(Number(el.ppgSampleRateInput.value || 0) - nextRate) > 0.05) {
+    el.ppgSampleRateInput.value = nextRate.toFixed(Math.abs(nextRate - Math.round(nextRate)) < 0.05 ? 0 : 1);
+  }
+}
+
+function getLivePpgRetentionCount() {
+  const windowSec = normalizeNumber(el.ppgDurationInput?.value, 30, 8, 180);
+  const rateHz = normalizeNumber(state.ppg.sampleRateHz, state.settings.rateHz || 100, 1, 1000);
+  return Math.min(PPG_MAX_LIVE_POINTS, Math.max(1200, Math.ceil(rateHz * Math.max(windowSec * 1.6, 90))));
+}
+
+function trimLivePpgSamples() {
+  const maxSamples = getLivePpgRetentionCount();
+  while (state.ppg.samples.length > maxSamples) {
+    state.ppg.samples.shift();
+  }
+}
+
+function makeLivePpgSampleFromAdc(sample) {
+  const signal = getAdcPpgSignal(sample);
+  resetPpgForLiveIfNeeded(signal.source);
+  updateLivePpgSampleRate(sample);
+  if (state.ppg.liveStartMicros == null || (Number.isFinite(sample.micros) && sample.micros < state.ppg.liveStartMicros)) {
+    state.ppg.liveStartMicros = Number.isFinite(sample.micros) ? sample.micros : 0;
+  }
+  const tSec = Number.isFinite(sample.micros)
+    ? (sample.micros - state.ppg.liveStartMicros) / 1000000
+    : state.ppg.samples.length / Math.max(1, state.ppg.sampleRateHz || 100);
+  return {
+    seq: sample.seq,
+    micros: sample.micros,
+    tSec,
+    ppg: signal.value,
+    raw: sample.raw,
+    filtered: sample.filtered,
+    source: signal.source,
+    channel: sample.channel,
+    receivedAt: sample.receivedAt
+  };
+}
+
+function addAdcSampleToLivePpg(sample) {
+  if (!Number.isFinite(sample.raw) && !Number.isFinite(sample.filtered)) {
+    return;
+  }
+  const liveSample = makeLivePpgSampleFromAdc(sample);
+  state.ppg.samples.push(liveSample);
+  trimLivePpgSamples();
+  maybeRunLivePpgAnalysis(liveSample);
+}
+
+function addPpgSampleToAdcPlot(sample) {
+  const adcSample = {
+    seq: sample.seq,
+    micros: sample.micros,
+    channel: state.settings.channel,
+    raw: sample.ppg,
+    millivolts: Number.isFinite(sample.ppg)
+      ? (sample.ppg / Math.max(1, (1 << state.settings.resolution) - 1)) * 3300
+      : NaN,
+    filtered: sample.ppg,
+    receivedAt: sample.receivedAt,
+    format: "PPG",
+    formatDetail: "stage3 raw",
+    valueUnit: "count",
+    rawLabel: "PPG raw",
+    filteredLabel: "PPG raw",
+    ppgMirror: true
+  };
+  adcSample.format = adcSample.format || "PPG";
+  state.adcFormatCounts.PPG = (state.adcFormatCounts.PPG || 0) + 1;
+  state.samples.push(adcSample);
+  if (state.samples.length > MAX_POINTS) {
+    state.samples.shift();
+  }
+  state.receivedSamples++;
+  state.latestSample = adcSample;
+  if (state.recording) {
+    state.records.push({ ...adcSample, kind: "adc", label: el.labelInput.value.trim() || "unlabeled" });
+  }
+  state.tableRows.unshift(adcSample);
+  if (state.tableRows.length > MAX_TABLE_ROWS) {
+    state.tableRows.pop();
+  }
+}
+
+function addLivePpgSample(sample) {
+  resetPpgForLiveIfNeeded(sample.source || "raw");
+  updateLivePpgSampleRate(sample);
+  state.ppg.samples.push(sample);
+  trimLivePpgSamples();
+  addPpgSampleToAdcPlot(sample);
+  maybeRunLivePpgAnalysis(sample);
+  scheduleUiRender();
+}
+
+function updateLiveHr(result) {
+  resetPpgForLiveIfNeeded(state.ppg.signalSource || "raw");
+  state.ppg.liveHr = result;
+  scheduleUiRender();
+}
+
+function updateClassification(result) {
+  state.classification = {
+    ...state.classification,
+    ...result,
+    active: state.classification.active
+  };
+  renderClassification();
+  if (state.activeView === "classification") {
+    drawPlot();
+  }
+}
+
+function getClassificationInputWindow() {
+  const windowSize = getInputWindowSize();
+  const useProcessed = isInputPreprocessActive();
+  const sourceName = useProcessed ? "processed" : "raw";
+  const frames = useProcessed ? state.imuProcessedSamples : state.imuSamples;
+  const available = Math.min(frames.length, windowSize);
+  const startIndex = Math.max(0, frames.length - available);
+  const windowFrames = frames.slice(startIndex);
+  const latest = windowFrames[windowFrames.length - 1] || null;
+  const first = windowFrames[0] || null;
+  const keys = useProcessed
+    ? { ax: "pax", ay: "pay", az: "paz" }
+    : { ax: "ax", ay: "ay", az: "az" };
+  return {
+    windowSize,
+    sourceName,
+    frames: windowFrames,
+    available,
+    first,
+    latest,
+    keys
+  };
+}
+
+function getClassificationInputWindowText() {
+  const inputWindow = getClassificationInputWindow();
+  const seqText = inputWindow.latest && inputWindow.first
+    ? `seq ${inputWindow.first.seq}-${inputWindow.latest.seq}`
+    : "no IMU window";
+  const result = state.classification;
+  const resultSeq = result.seq == null ? "no class result" : `class seq ${result.seq}`;
+  return `Input data window: ${inputWindow.available}/${inputWindow.windowSize} ${inputWindow.sourceName} samples - ${state.settings.inputFilter} - ${state.settings.normalizeMode} - ${seqText} - ${resultSeq}`;
+}
+
+function updateClassificationInputState() {
+  el.classificationWindowState.textContent = getClassificationInputWindowText();
+}
+
+function renderClassification() {
+  const result = state.classification;
+  el.classificationState.textContent = result.startPending ? "Starting" : result.active ? "Running" : "Idle";
+  el.classificationTopLabel.textContent = result.topLabel || "--";
+  el.classificationTopScore.textContent = Number.isFinite(result.topScore)
+    ? `${(result.topScore * 100).toFixed(1)}%`
+    : "--";
+  updateClassificationInputState();
+
+  const sortedScores = [...(result.scores || [])]
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 8);
+
+  el.classificationList.replaceChildren(
+    ...sortedScores.map((score) => {
+      const row = document.createElement("div");
+      row.className = "classification-row";
+      const percent = Math.max(0, Math.min(100, score.value * 100));
+      const name = document.createElement("span");
+      name.className = "classification-name";
+      name.textContent = score.label;
+      const value = document.createElement("span");
+      value.className = "classification-score";
+      value.textContent = `${percent.toFixed(1)}%`;
+      const bar = document.createElement("span");
+      bar.className = "classification-bar";
+      const fill = document.createElement("span");
+      fill.className = "classification-fill";
+      fill.style.width = `${percent.toFixed(1)}%`;
+      bar.append(fill);
+      row.append(name, value, bar);
+      return row;
+    })
+  );
+}
+
+function parseCsvLine(line) {
+  const cells = [];
+  let current = "";
+  let quoted = false;
+  for (let index = 0; index < line.length; index++) {
+    const char = line[index];
+    if (char === "\"") {
+      if (quoted && line[index + 1] === "\"") {
+        current += "\"";
+        index++;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (char === "," && !quoted) {
+      cells.push(current);
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  cells.push(current);
+  return cells;
+}
+
+function inferPpgSampleRate(samples) {
+  if (samples.length < 2) {
+    return 32;
+  }
+  const deltas = [];
+  for (let index = 1; index < Math.min(samples.length, 80); index++) {
+    const delta = samples[index].tSec - samples[index - 1].tSec;
+    if (Number.isFinite(delta) && delta > 0) {
+      deltas.push(delta);
+    }
+  }
+  if (deltas.length === 0) {
+    return 32;
+  }
+  deltas.sort((a, b) => a - b);
+  return Math.max(1, Math.min(200, 1 / deltas[Math.floor(deltas.length / 2)]));
+}
+
+function parseTimestampSeconds(value) {
+  const text = String(value ?? "").trim();
+  const match = text.match(
+    /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?/
+  );
+  if (match) {
+    const [, year, month, day, hour, minute, second, fraction = ""] = match;
+    const wholeSeconds = Date.UTC(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hour),
+      Number(minute),
+      Number(second)
+    ) / 1000;
+    const fractionalSeconds = fraction ? Number(`0.${fraction}`) : 0;
+    return wholeSeconds + fractionalSeconds;
+  }
+  const parsedMs = Date.parse(text);
+  return Number.isFinite(parsedMs) ? parsedMs / 1000 : NaN;
+}
+
+function parsePpgCsv(text, source = "CSV") {
+  const lines = text.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  if (lines.length < 2) {
+    throw new Error("PPG CSV has no data rows");
+  }
+  const headers = parseCsvLine(lines[0]).map((header) => header.trim());
+  const indexOf = (name) => headers.findIndex((header) => header.toLowerCase() === name);
+  const timeIndex = indexOf("time");
+  const ppgIndex = indexOf("ppg");
+  const hrIndex = indexOf("hr");
+  const activityIndex = indexOf("activity_label") >= 0 ? indexOf("activity_label") : indexOf("activity");
+  if (ppgIndex < 0) {
+    throw new Error("PPG CSV must include a ppg column");
+  }
+
+  const samples = [];
+  let firstTimeSec = null;
+  for (let lineIndex = 1; lineIndex < lines.length && samples.length < PPG_MAX_PARSE_ROWS; lineIndex++) {
+    const cells = parseCsvLine(lines[lineIndex]);
+    const ppg = Number(cells[ppgIndex]);
+    if (!Number.isFinite(ppg)) {
+      continue;
+    }
+    let tSec = samples.length / 32;
+    if (timeIndex >= 0) {
+      const timeSec = parseTimestampSeconds(cells[timeIndex]);
+      if (Number.isFinite(timeSec)) {
+        if (firstTimeSec == null) {
+          firstTimeSec = timeSec;
+        }
+        tSec = timeSec - firstTimeSec;
+      }
+    }
+    samples.push({
+      tSec,
+      ppg,
+      hr: hrIndex >= 0 ? Number(cells[hrIndex]) : NaN,
+      activity: activityIndex >= 0 ? cells[activityIndex] : ""
+    });
+  }
+  if (samples.length < 2) {
+    throw new Error("No numeric PPG samples found");
+  }
+
+  const sampleRateHz = inferPpgSampleRate(samples);
+  state.ppg.samples = samples;
+  state.ppg.sampleRateHz = sampleRateHz;
+  state.ppg.source = source;
+  state.ppg.signalSource = "csv";
+  state.ppg.columns = headers;
+  state.ppg.analysis = null;
+  state.ppg.liveHr = null;
+  state.ppg.liveStartMicros = null;
+  state.ppg.lastAutoAnalysisAt = 0;
+  state.ppg.lastAutoAnalysisSeq = null;
+  state.ppg.error = "";
+  if (el.ppgSampleRateInput) {
+    el.ppgSampleRateInput.value = sampleRateHz.toFixed(Math.abs(sampleRateHz - Math.round(sampleRateHz)) < 0.01 ? 0 : 2);
+  }
+  logLine(`PPG_LOAD,rows=${samples.length},fs=${sampleRateHz.toFixed(2)},source=${source}`);
+  renderPpgView();
+  setUiEnabled();
+}
+
+function getPpgOptions() {
+  return {
+    sampleRateHz: normalizeNumber(el.ppgSampleRateInput?.value, state.ppg.sampleRateHz || state.settings.rateHz || 100, 1, 1000),
+    startMin: normalizeNumber(el.ppgStartInput?.value, 0, 0, 10000),
+    durationSec: normalizeNumber(el.ppgDurationInput?.value, 30, 8, 180),
+    refractoryMs: normalizeNumber(el.ppgRefractoryInput.value, 420, 250, 1200),
+    threshold: normalizeNumber(el.ppgThresholdInput.value, 0.42, 0.1, 0.9)
+  };
+}
+
+function getPpgWindow(options = getPpgOptions()) {
+  if (state.ppg.source === "Live ADC") {
+    const latest = state.ppg.samples[state.ppg.samples.length - 1];
+    if (!latest) {
+      return [];
+    }
+    const startSec = latest.tSec - options.durationSec;
+    return state.ppg.samples.filter((sample) => sample.tSec >= startSec && sample.tSec <= latest.tSec);
+  }
+  const startSec = options.startMin * 60;
+  const durationSec = options.durationSec;
+  return state.ppg.samples.filter((sample) => sample.tSec >= startSec && sample.tSec < startSec + durationSec);
+}
+
+function movingAverage(values, radius) {
+  const out = Array(values.length).fill(0);
+  let sum = 0;
+  for (let index = 0; index < values.length; index++) {
+    sum += values[index];
+    const removeIndex = index - radius * 2 - 1;
+    if (removeIndex >= 0) {
+      sum -= values[removeIndex];
+    }
+    const count = Math.min(index + 1, radius * 2 + 1);
+    out[index] = sum / count;
+  }
+  return out;
+}
+
+function preprocessPpgWindow(window, sampleRateHz) {
+  const raw = window.map((sample) => sample.ppg);
+  const baselineRadius = Math.max(3, Math.round(sampleRateHz * 1.2));
+  const smoothRadius = Math.max(1, Math.round(sampleRateHz * 0.08));
+  const baseline = movingAverage(raw, baselineRadius);
+  const detrended = raw.map((value, index) => value - baseline[index]);
+  const smoothed = movingAverage(detrended, smoothRadius);
+  const mean = smoothed.reduce((sum, value) => sum + value, 0) / Math.max(1, smoothed.length);
+  const variance = smoothed.reduce((sum, value) => sum + (value - mean) ** 2, 0) / Math.max(1, smoothed.length);
+  const std = Math.max(1e-6, Math.sqrt(variance));
+  return smoothed.map((value) => (value - mean) / std);
+}
+
+function convolveSame(values, kernel) {
+  const radius = Math.floor(kernel.length / 2);
+  return values.map((_, index) => {
+    let sum = 0;
+    for (let k = 0; k < kernel.length; k++) {
+      const sourceIndex = Math.max(0, Math.min(values.length - 1, index + k - radius));
+      sum += values[sourceIndex] * kernel[k];
+    }
+    return sum;
+  });
+}
+
+function normalizeUnit(values) {
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = Math.max(1e-6, max - min);
+  return values.map((value) => (value - min) / span);
+}
+
+function runPpgCnnDetector(processed, sampleRateHz) {
+  const kernels = [
+    [-0.20, -0.35, -0.15, 0.25, 0.75, 1.00, 0.75, 0.25, -0.15, -0.35, -0.20],
+    [-0.40, -0.25, 0.00, 0.35, 0.80, 0.35, 0.00, -0.25, -0.40],
+    [-0.50, -0.20, 0.35, 0.80, 0.35, -0.20, -0.50]
+  ];
+  const featureMaps = kernels.map((kernel) => convolveSame(processed, kernel).map((value) => Math.max(0, value)));
+  const fused = processed.map((_, index) => (
+    featureMaps.reduce((sum, map) => sum + map[index], 0) / featureMaps.length
+  ));
+  const pooled = movingAverage(fused, Math.max(1, Math.round(sampleRateHz * 0.06)));
+  return {
+    kernels: kernels.map((kernel) => kernel.length),
+    score: normalizeUnit(pooled)
+  };
+}
+
+function detectPeaksFromScore(score, threshold, refractorySamples) {
+  const peaks = [];
+  let lastPeak = -Infinity;
+  for (let index = 1; index < score.length - 1; index++) {
+    if (score[index] < threshold || score[index] < score[index - 1] || score[index] < score[index + 1]) {
+      continue;
+    }
+    if (index - lastPeak < refractorySamples) {
+      if (peaks.length > 0 && score[index] > score[peaks[peaks.length - 1]]) {
+        peaks[peaks.length - 1] = index;
+        lastPeak = index;
+      }
+      continue;
+    }
+    peaks.push(index);
+    lastPeak = index;
+  }
+  return peaks;
+}
+
+function computeHrvFromPeaks(peaks, sampleRateHz) {
+  const ibiMs = [];
+  for (let index = 1; index < peaks.length; index++) {
+    const ibi = ((peaks[index] - peaks[index - 1]) / sampleRateHz) * 1000;
+    if (ibi >= 300 && ibi <= 2000) {
+      ibiMs.push(ibi);
+    }
+  }
+  if (ibiMs.length < 2) {
+    return {
+      peaks: peaks.length,
+      ibiMs,
+      hrBpm: NaN,
+      meanIbiMs: NaN,
+      rmssdMs: NaN,
+      sdnnMs: NaN,
+      pnn50: NaN
+    };
+  }
+  const meanIbiMs = ibiMs.reduce((sum, value) => sum + value, 0) / ibiMs.length;
+  const diffs = [];
+  for (let index = 1; index < ibiMs.length; index++) {
+    diffs.push(ibiMs[index] - ibiMs[index - 1]);
+  }
+  const rmssdMs = Math.sqrt(diffs.reduce((sum, value) => sum + value * value, 0) / Math.max(1, diffs.length));
+  const sdnnMs = Math.sqrt(ibiMs.reduce((sum, value) => sum + (value - meanIbiMs) ** 2, 0) / Math.max(1, ibiMs.length - 1));
+  const pnn50 = diffs.filter((value) => Math.abs(value) > 50).length / Math.max(1, diffs.length);
+  return {
+    peaks: peaks.length,
+    ibiMs,
+    hrBpm: 60000 / meanIbiMs,
+    meanIbiMs,
+    rmssdMs,
+    sdnnMs,
+    pnn50
+  };
+}
+
+function runPpgAnalysis(optionsOverride = {}) {
+  const options = getPpgOptions();
+  const window = getPpgWindow(options);
+  if (window.length < Math.max(10, options.sampleRateHz * 8)) {
+    throw new Error("Selected PPG window is too short");
+  }
+  const processed = preprocessPpgWindow(window, options.sampleRateHz);
+  const cnn = runPpgCnnDetector(processed, options.sampleRateHz);
+  const refractorySamples = Math.max(1, Math.round((options.refractoryMs / 1000) * options.sampleRateHz));
+  const peaks = detectPeaksFromScore(cnn.score, options.threshold, refractorySamples);
+  const hrv = computeHrvFromPeaks(peaks, options.sampleRateHz);
+  const referenceHrValues = window.map((sample) => sample.hr).filter(Number.isFinite);
+  const referenceHr = referenceHrValues.length > 0
+    ? referenceHrValues.reduce((sum, value) => sum + value, 0) / referenceHrValues.length
+    : NaN;
+  state.ppg.analysis = {
+    options,
+    window,
+    processed,
+    cnn,
+    peaks,
+    hrv,
+    referenceHr
+  };
+  state.ppg.error = "";
+  if (!optionsOverride.silent) {
+    logLine(`PPG_ANALYZE,window=${window.length},peaks=${peaks.length},hr=${Number.isFinite(hrv.hrBpm) ? hrv.hrBpm.toFixed(1) : "nan"}`);
+  }
+  renderPpgView();
+}
+
+function maybeRunLivePpgAnalysis(latestSample) {
+  if (state.ppg.source !== "Live ADC" || !latestSample) {
+    return;
+  }
+  const options = getPpgOptions();
+  const requiredSamples = Math.max(10, Math.ceil(options.sampleRateHz * 8));
+  if (state.ppg.samples.length < requiredSamples) {
+    state.ppg.analysis = null;
+    state.ppg.error = "";
+    return;
+  }
+  const now = performance.now();
+  const seqDelta = state.ppg.lastAutoAnalysisSeq == null
+    ? Infinity
+    : Math.abs(latestSample.seq - state.ppg.lastAutoAnalysisSeq);
+  const sampleIntervalReady = seqDelta >= Math.max(1, Math.round(options.sampleRateHz));
+  const timeReady = now - state.ppg.lastAutoAnalysisAt >= PPG_LIVE_ANALYSIS_INTERVAL_MS;
+  if (!sampleIntervalReady && !timeReady) {
+    return;
+  }
+
+  try {
+    runPpgAnalysis({ silent: true });
+    state.ppg.lastAutoAnalysisAt = now;
+    state.ppg.lastAutoAnalysisSeq = latestSample.seq;
+  } catch (error) {
+    if (!/too short/i.test(error.message)) {
+      state.ppg.error = error.message;
+    }
+  }
+}
+
+async function loadBundledPpgCsv() {
+  state.ppg.loading = true;
+  state.ppg.error = "";
+  el.ppgStatus.textContent = "Loading";
+  setUiEnabled();
+  try {
+    let lastError = null;
+    for (const path of PPG_SAMPLE_PATHS) {
+      try {
+        const response = await fetch(path, { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        parsePpgCsv(await response.text(), path);
+        return;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError || new Error("No bundled PPG CSV path worked");
+  } catch (error) {
+    state.ppg.error = error.message;
+    el.ppgStatus.textContent = "Load failed";
+    logLine(`ERR,ppg_load,${error.message}`);
+  } finally {
+    state.ppg.loading = false;
+    renderPpgView();
+    setUiEnabled();
+  }
+}
+
+async function importPpgCsv(event) {
+  const file = event.target.files?.[0];
+  if (!file) {
+    return;
+  }
+  state.ppg.loading = true;
+  state.ppg.error = "";
+  el.ppgStatus.textContent = "Loading";
+  setUiEnabled();
+  try {
+    parsePpgCsv(await file.text(), file.name);
+  } catch (error) {
+    state.ppg.error = error.message;
+    el.ppgStatus.textContent = "Load failed";
+    logLine(`ERR,ppg_import,${error.message}`);
+  } finally {
+    state.ppg.loading = false;
+    renderPpgView();
+    setUiEnabled();
+  }
+}
+
+function safeMetric(value, digits = 1, suffix = "") {
+  return Number.isFinite(value) ? `${value.toFixed(digits)}${suffix}` : "--";
+}
+
+function renderPpgView() {
+  const sampleCount = state.ppg.samples.length;
+  const analysis = state.ppg.analysis;
+  const liveHr = state.ppg.liveHr;
+  const isLive = state.ppg.source === "Live ADC";
+  const sourceLabel = isLive
+    ? `Live ADC ${state.ppg.signalSource || "raw"}`
+    : state.ppg.source || "CSV";
+  el.ppgStatus.textContent = state.ppg.loading
+    ? "Loading"
+    : state.ppg.error ? state.ppg.error
+    : analysis && isLive ? "Live HRV"
+    : analysis ? "Analyzed" : isLive && sampleCount > 0 ? "Estimating" : sampleCount > 0 ? "Ready" : "No data";
+  el.ppgSourceState.textContent = sampleCount > 0
+    ? `${sourceLabel} - ${sampleCount} samples`
+    : "Waiting for ADC";
+  el.ppgMetricState.textContent = analysis
+    ? `${analysis.peaks.length} peaks`
+    : liveHr && Number.isFinite(liveHr.hrBpm) ? `${liveHr.hrBpm.toFixed(1)} bpm`
+    : `${sampleCount} samples`;
+  el.ppgThresholdOutput.textContent = Number(el.ppgThresholdInput.value).toFixed(2);
+
+  if (!analysis) {
+    const options = getPpgOptions();
+    const requiredSamples = Math.max(10, Math.ceil(options.sampleRateHz * 8));
+    const windowSamples = getPpgWindow(options).length;
+    el.ppgWindowState.textContent = isLive
+      ? `${Math.min(windowSamples, sampleCount)} / ${Math.max(requiredSamples, Math.ceil(options.sampleRateHz * options.durationSec))} samples`
+      : sampleCount > 0 ? "Ready to analyze" : "No window";
+    el.ppgCnnState.textContent = isLive
+      ? "Waiting for window"
+      : "Idle";
+    el.ppgMetrics.replaceChildren(
+      metricRow("Sample Rate", `${Number(el.ppgSampleRateInput.value || state.ppg.sampleRateHz).toFixed(1)} Hz`),
+      metricRow("Window", `${safeMetric(windowSamples, 0)} / ${Math.ceil(options.sampleRateHz * options.durationSec)}`),
+      metricRow("ADC Source", state.ppg.signalSource || "--"),
+      metricRow("Last HR", liveHr && Number.isFinite(liveHr.hrBpm) ? `${liveHr.hrBpm.toFixed(1)} bpm` : "--"),
+      metricRow("Quality", liveHr && Number.isFinite(liveHr.quality) ? liveHr.quality.toFixed(3) : "--")
+    );
+    if (sampleCount > 0) {
+      drawLivePpgPlot();
+    } else {
+      drawEmptyAuxPlot(el.ppgCanvas, "Start ADC streaming");
+    }
+    drawPpgCnnArchitecture();
+    return;
+  }
+
+  const hrv = analysis.hrv;
+  el.ppgWindowState.textContent = `${analysis.window.length} samples - ${analysis.options.durationSec.toFixed(0)} s`;
+  el.ppgCnnState.textContent = `Conv kernels ${analysis.cnn.kernels.join("/")}`;
+  const rows = [
+    metricRow("CNN HR", safeMetric(hrv.hrBpm, 1, " bpm")),
+    metricRow("RMSSD", safeMetric(hrv.rmssdMs, 1, " ms")),
+    metricRow("SDNN", safeMetric(hrv.sdnnMs, 1, " ms")),
+    metricRow("pNN50", Number.isFinite(hrv.pnn50) ? `${(hrv.pnn50 * 100).toFixed(1)}%` : "--"),
+    metricRow("Mean IBI", safeMetric(hrv.meanIbiMs, 1, " ms")),
+    metricRow("ADC Source", isLive ? state.ppg.signalSource || "--" : "CSV")
+  ];
+  if (!isLive) {
+    rows.splice(1, 0, metricRow("Reference HR", safeMetric(analysis.referenceHr, 1, " bpm")));
+  }
+  el.ppgMetrics.replaceChildren(...rows);
+  drawPpgSignalPlot();
+  drawPpgCnnScorePlot();
+}
+
+function drawLivePpgPlot() {
+  const samples = state.ppg.samples;
+  if (!samples.length) {
+    drawEmptyAuxPlot(el.ppgCanvas, "No live PPG samples");
+    return;
+  }
+  const { ctx: ppgCtx, width, height } = resizeAuxCanvasToDisplaySize(el.ppgCanvas, 220);
+  const pad = { left: 48, right: 18, top: 18, bottom: 34 };
+  const plotWidth = width - pad.left - pad.right;
+  const plotHeight = height - pad.top - pad.bottom;
+  const values = samples.map((sample) => sample.ppg);
+  const minY = Math.min(...values);
+  const maxY = Math.max(...values);
+  const span = Math.max(1, maxY - minY);
+
+  ppgCtx.clearRect(0, 0, width, height);
+  ppgCtx.fillStyle = "#ffffff";
+  ppgCtx.fillRect(0, 0, width, height);
+  drawGridOn(ppgCtx, width, height, pad, plotWidth, plotHeight);
+  ppgCtx.strokeStyle = "#008c8c";
+  ppgCtx.lineWidth = 1.6;
+  ppgCtx.beginPath();
+  values.forEach((value, index) => {
+    const x = pad.left + (plotWidth * index) / Math.max(1, values.length - 1);
+    const y = pad.top + plotHeight - ((value - minY) / span) * plotHeight;
+    if (index === 0) {
+      ppgCtx.moveTo(x, y);
+    } else {
+      ppgCtx.lineTo(x, y);
+    }
+  });
+  ppgCtx.stroke();
+
+  const liveHr = state.ppg.liveHr;
+  drawLegendOn(ppgCtx, [
+    { color: "#008c8c", label: state.ppg.signalSource === "filtered" ? "Filtered ADC" : "Raw ADC" },
+    { color: "#2767c9", label: liveHr && Number.isFinite(liveHr.hrBpm) ? `${liveHr.hrBpm.toFixed(1)} bpm` : "waiting HR" }
+  ], pad.left + 8, pad.top + 18);
+}
+
+function drawEmptyAuxPlot(canvas, message) {
+  const { ctx: auxCtx, width, height } = resizeAuxCanvasToDisplaySize(canvas, 190);
+  auxCtx.clearRect(0, 0, width, height);
+  auxCtx.fillStyle = "#ffffff";
+  auxCtx.fillRect(0, 0, width, height);
+  auxCtx.fillStyle = "#637083";
+  auxCtx.font = "14px Segoe UI, Arial, sans-serif";
+  auxCtx.fillText(message, 18, 34);
+}
+
+function drawPpgSignalPlot() {
+  const analysis = state.ppg.analysis;
+  if (!analysis) {
+    drawEmptyAuxPlot(el.ppgCanvas, "No PPG analysis");
+    return;
+  }
+  const { ctx: ppgCtx, width, height } = resizeAuxCanvasToDisplaySize(el.ppgCanvas, 220);
+  const pad = { left: 48, right: 18, top: 18, bottom: 34 };
+  const plotWidth = width - pad.left - pad.right;
+  const plotHeight = height - pad.top - pad.bottom;
+  ppgCtx.clearRect(0, 0, width, height);
+  ppgCtx.fillStyle = "#ffffff";
+  ppgCtx.fillRect(0, 0, width, height);
+  drawGridOn(ppgCtx, width, height, pad, plotWidth, plotHeight);
+  const values = analysis.processed;
+  const minY = Math.min(-0.5, ...values);
+  const maxY = Math.max(0.5, ...values);
+  ppgCtx.strokeStyle = "#008c8c";
+  ppgCtx.lineWidth = 1.6;
+  ppgCtx.beginPath();
+  values.forEach((value, index) => {
+    const x = pad.left + (plotWidth * index) / Math.max(1, values.length - 1);
+    const y = pad.top + plotHeight - ((value - minY) / (maxY - minY)) * plotHeight;
+    if (index === 0) {
+      ppgCtx.moveTo(x, y);
+    } else {
+      ppgCtx.lineTo(x, y);
+    }
+  });
+  ppgCtx.stroke();
+
+  ppgCtx.fillStyle = "#d28a00";
+  for (const peak of analysis.peaks) {
+    const x = pad.left + (plotWidth * peak) / Math.max(1, values.length - 1);
+    const value = values[peak];
+    const y = pad.top + plotHeight - ((value - minY) / (maxY - minY)) * plotHeight;
+    ppgCtx.beginPath();
+    ppgCtx.arc(x, y, 3.5, 0, Math.PI * 2);
+    ppgCtx.fill();
+  }
+  drawLegendOn(ppgCtx, [
+    { color: "#008c8c", label: "PPG" },
+    { color: "#d28a00", label: "peaks" }
+  ], pad.left + 8, pad.top + 18);
+}
+
+function drawPpgCnnArchitecture() {
+  const { ctx: cnnCtx, width, height } = resizeAuxCanvasToDisplaySize(el.ppgCnnCanvas, 180);
+  cnnCtx.clearRect(0, 0, width, height);
+  cnnCtx.fillStyle = "#ffffff";
+  cnnCtx.fillRect(0, 0, width, height);
+  const layers = [
+    { label: "Input", value: "PPG window", color: "#008c8c" },
+    { label: "Conv1D", value: "3 kernels", color: "#d28a00" },
+    { label: "ReLU + Pool", value: "score map", color: "#7b5fb2" },
+    { label: "Peak Gate", value: "IBI", color: "#2767c9" },
+    { label: "HRV", value: "RMSSD/SDNN", color: "#008c8c" }
+  ];
+  const gap = (width - 80) / Math.max(1, layers.length - 1);
+  const y = height / 2;
+  cnnCtx.strokeStyle = "#d7dee8";
+  cnnCtx.lineWidth = 2;
+  cnnCtx.beginPath();
+  cnnCtx.moveTo(40, y);
+  cnnCtx.lineTo(width - 40, y);
+  cnnCtx.stroke();
+  layers.forEach((layer, index) => {
+    const x = 40 + gap * index;
+    cnnCtx.fillStyle = layer.color;
+    cnnCtx.beginPath();
+    cnnCtx.arc(x, y, 10, 0, Math.PI * 2);
+    cnnCtx.fill();
+    cnnCtx.fillStyle = "#17202a";
+    cnnCtx.font = "700 12px Segoe UI, Arial, sans-serif";
+    cnnCtx.textAlign = "center";
+    cnnCtx.fillText(layer.label, x, y - 24);
+    cnnCtx.fillStyle = "#637083";
+    cnnCtx.font = "11px Segoe UI, Arial, sans-serif";
+    cnnCtx.fillText(layer.value, x, y + 34);
+  });
+  cnnCtx.textAlign = "start";
+}
+
+function drawPpgCnnScorePlot() {
+  const analysis = state.ppg.analysis;
+  if (!analysis) {
+    drawPpgCnnArchitecture();
+    return;
+  }
+  const { ctx: cnnCtx, width, height } = resizeAuxCanvasToDisplaySize(el.ppgCnnCanvas, 180);
+  const pad = { left: 44, right: 16, top: 18, bottom: 30 };
+  const plotWidth = width - pad.left - pad.right;
+  const plotHeight = height - pad.top - pad.bottom;
+  cnnCtx.clearRect(0, 0, width, height);
+  cnnCtx.fillStyle = "#ffffff";
+  cnnCtx.fillRect(0, 0, width, height);
+  drawGridOn(cnnCtx, width, height, pad, plotWidth, plotHeight);
+  const score = analysis.cnn.score;
+  cnnCtx.strokeStyle = "#2767c9";
+  cnnCtx.lineWidth = 1.8;
+  cnnCtx.beginPath();
+  score.forEach((value, index) => {
+    const x = pad.left + (plotWidth * index) / Math.max(1, score.length - 1);
+    const y = pad.top + plotHeight - value * plotHeight;
+    if (index === 0) {
+      cnnCtx.moveTo(x, y);
+    } else {
+      cnnCtx.lineTo(x, y);
+    }
+  });
+  cnnCtx.stroke();
+  const thresholdY = pad.top + plotHeight - analysis.options.threshold * plotHeight;
+  cnnCtx.strokeStyle = "#d28a00";
+  cnnCtx.setLineDash([6, 5]);
+  cnnCtx.beginPath();
+  cnnCtx.moveTo(pad.left, thresholdY);
+  cnnCtx.lineTo(width - pad.right, thresholdY);
+  cnnCtx.stroke();
+  cnnCtx.setLineDash([]);
+  drawLegendOn(cnnCtx, [
+    { color: "#2767c9", label: "score" },
+    { color: "#d28a00", label: "gate" }
+  ], pad.left + 8, pad.top + 18);
+}
+
+function setActiveView(view) {
+  state.activeView = view;
+  for (const tab of el.viewTabs) {
+    tab.classList.toggle("active", tab.dataset.view === view);
+  }
+  updateViewVisibility();
+  drawPlot();
+  if (view === "classification") {
+    void ensureClassificationRunningFromStream("tab");
+  }
+}
+
+async function ensureClassificationRunningFromStream(reason = "view") {
+  if (state.activeView !== "classification") {
+    return;
+  }
+  if (!state.connected || !state.streaming || !state.writer) {
+    renderClassification();
+    return;
+  }
+  if (state.classification.active || state.classification.startPending) {
+    renderClassification();
+    return;
+  }
+
+  state.classification.startPending = true;
+  renderClassification();
+  setUiEnabled();
+
+  try {
+    state.settings.rateHz = normalizeNumber(el.rateInput.value, 63, 1, 200);
+    applyInputPreprocess();
+    await sendCommand(`RATE ${state.settings.rateHz}`);
+    await sendCommand("CLS ON");
+    logLine(`CLASS_AUTO_START,${reason},rate=${state.settings.rateHz},window=${getInputWindowSize()}`);
+  } catch (error) {
+    state.classification.startPending = false;
+    el.classificationState.textContent = "Start failed";
+    logLine(`ERR,class_auto_start,${error.message}`);
+  } finally {
+    setUiEnabled();
+    renderClassification();
+  }
+}
+
+function syncSettingsPanelVisibility() {
+  const showAdcSettings = state.activeView === "adc";
+  const showInputSettings = ["imu1d", "imu2d", "classification", "dataset", "model"].includes(state.activeView);
+  const showClassificationSettings = state.activeView === "classification";
+
+  el.adcSettingsSection.classList.toggle("is-hidden", !showAdcSettings);
+  el.inputSettingsSection.classList.toggle("is-hidden", !showInputSettings);
+  el.classificationSettingsSection.classList.toggle("is-hidden", !showClassificationSettings);
+}
+
+function updateViewVisibility() {
+  const isPpg = state.activeView === "ppg";
+  const isDataset = state.activeView === "dataset";
+  const isModel = state.activeView === "model";
+  const isCanvas = !NON_CANVAS_VIEWS.has(state.activeView);
+  const isAdc = state.activeView === "adc";
+  el.signalCanvas.classList.toggle("is-hidden", !isCanvas);
+  el.metricGrid.classList.toggle("is-hidden", !isCanvas);
+  el.adcPlotControls.classList.toggle("is-hidden", !isAdc);
+  el.ppgView.classList.toggle("is-hidden", !isPpg);
+  el.datasetView.classList.toggle("is-hidden", !isDataset);
+  el.modelView.classList.toggle("is-hidden", !isModel);
+  syncSettingsPanelVisibility();
+  if (isPpg) {
+    renderPpgView();
+  }
+  if (isDataset) {
+    renderDatasetView();
+  }
+  if (isModel) {
+    renderModelView();
+  }
+}
+
+function scheduleUiRender() {
+  if (state.renderPending) {
+    return;
+  }
+
+  const elapsed = performance.now() - state.lastRenderTime;
+  const delay = Math.max(0, RENDER_INTERVAL_MS - elapsed);
+  state.renderPending = true;
+
+  setTimeout(() => {
+    requestAnimationFrame(flushUiRender);
+  }, delay);
+}
+
+function flushUiRender(now) {
+  state.renderPending = false;
+  state.lastRenderTime = now;
+
+  if (!state.latestSample && !state.latestImu && !state.classification.updatedAt) {
+    return;
+  }
+
+  updateCurrentMetrics();
+  updateRateMetric(now);
+
+  if (state.latestSample && now - state.lastTableRenderTime >= TABLE_RENDER_INTERVAL_MS) {
+    updateTable();
+    state.lastTableRenderTime = now;
+  }
+
+  drawPlot();
+  setUiEnabled();
+}
+
+function updateMetrics(sample) {
+  const unit = sample.valueUnit === "mV" ? "mV" : sample.valueUnit === "value" ? "" : "";
+  el.metric1Label.textContent = sample.rawLabel || "Raw";
+  el.metric2Label.textContent = sample.filteredLabel || "Filtered";
+  el.metric3Label.textContent = Number.isFinite(sample.millivolts) ? "Voltage" : "Format";
+  el.metric4Label.textContent = "Rate";
+  el.sampleCount.textContent = `${state.receivedSamples} samples`;
+  el.recordCount.textContent = `${state.records.length} rows`;
+  el.rawMetric.textContent = formatAdcMetric(sample.raw, sample.valueUnit === "count" ? 0 : 3, unit);
+  el.filteredMetric.textContent = formatAdcMetric(sample.filtered, sample.valueUnit === "count" ? 1 : 3, unit);
+  el.voltageMetric.textContent = Number.isFinite(sample.millivolts)
+    ? `${sample.millivolts.toFixed(1)} mV`
+    : sample.format || "--";
+  const detail = sample.formatDetail ? ` - ${sample.formatDetail}` : "";
+  const channel = Number.isFinite(sample.channel) ? `A${sample.channel}` : "ADC";
+  el.plotMeta.textContent = `${sample.format || "ADC"}${detail} - ${channel} - seq ${sample.seq}`;
+  el.lastTimestamp.textContent = `${sample.micros} us`;
+  updateAdcFormatState();
+}
+
+function updateCurrentMetrics() {
+  if (state.activeView === "ppg") {
+    renderPpgView();
+    return;
+  }
+
+  if (state.activeView === "dataset") {
+    renderDatasetView();
+    return;
+  }
+
+  if (state.activeView === "model") {
+    renderModelView();
+    return;
+  }
+
+  if (state.activeView === "adc" && state.latestSample) {
+    updateMetrics(state.latestSample);
+    return;
+  }
+
+  if (state.activeView.startsWith("imu") && state.latestImu) {
+    updateImuMetrics(state.latestImu);
+    return;
+  }
+
+  if (state.activeView === "classification") {
+    updateClassificationMetrics();
+  }
+}
+
+function updateImuMetrics(sample) {
+  const processed = state.latestProcessedImu;
+  const metricSource = isInputPreprocessActive() && processed ? processed : sample;
+  const prefix = isInputPreprocessActive() && processed ? "Proc" : "Accel";
+  const xValue = metricSource.pax ?? metricSource.ax;
+  const yValue = metricSource.pay ?? metricSource.ay;
+  const zValue = metricSource.paz ?? metricSource.az;
+  const unit = getInputUnits();
+
+  el.metric1Label.textContent = `${prefix} X`;
+  el.metric2Label.textContent = `${prefix} Y`;
+  el.metric3Label.textContent = `${prefix} Z`;
+  el.metric4Label.textContent = "IMU Rate";
+  el.sampleCount.textContent = `${state.receivedImuSamples} IMU`;
+  el.recordCount.textContent = `${state.records.length} rows`;
+  el.rawMetric.textContent = `${xValue.toFixed(3)} ${unit}`;
+  el.filteredMetric.textContent = `${yValue.toFixed(3)} ${unit}`;
+  el.voltageMetric.textContent = `${zValue.toFixed(3)} ${unit}`;
+  el.plotMeta.textContent = `IMU ${getInputWindowSize()} win - ${state.settings.inputFilter} - ${state.settings.normalizeMode} - seq ${sample.seq}`;
+  el.lastTimestamp.textContent = `${sample.micros} us`;
+}
+
+function updateClassificationMetrics() {
+  const result = state.classification;
+  updateClassificationInputState();
+  el.metric1Label.textContent = "Top Label";
+  el.metric2Label.textContent = "Confidence";
+  el.metric3Label.textContent = "DSP";
+  el.metric4Label.textContent = "Classify";
+  el.sampleCount.textContent = result.seq == null ? "0 class" : `${result.seq + 1} class`;
+  el.rawMetric.textContent = result.topLabel || "--";
+  el.filteredMetric.textContent = Number.isFinite(result.topScore) ? `${(result.topScore * 100).toFixed(1)}%` : "--";
+  el.voltageMetric.textContent = Number.isFinite(result.timing?.dsp_ms) ? `${result.timing.dsp_ms} ms` : "--";
+  el.rateMetric.textContent = Number.isFinite(result.timing?.classification_ms) ? `${result.timing.classification_ms} ms` : "--";
+  el.plotMeta.textContent = result.updatedAt
+    ? `Classification result - seq ${result.seq} - ${getInputWindowSize()} sample window`
+    : `Waiting for classification - ${getInputWindowSize()} sample window`;
+}
+
+function updateRateMetric(now = performance.now()) {
+  if (state.activeView === "classification") {
+    return;
+  }
+
+  if (state.activeView.startsWith("imu")) {
+    const elapsed = now - state.lastImuRateCheckTime;
+    if (elapsed < 1000) {
+      return;
+    }
+    const countDelta = state.receivedImuSamples - state.lastImuRateCheckCount;
+    const rate = (countDelta * 1000) / elapsed;
+    el.rateMetric.textContent = `${rate.toFixed(1)} Hz`;
+    state.lastImuRateCheckCount = state.receivedImuSamples;
+    state.lastImuRateCheckTime = now;
+    return;
+  }
+
+  const elapsed = now - state.lastRateCheckTime;
+  if (elapsed < 1000) {
+    return;
+  }
+  const countDelta = state.receivedSamples - state.lastRateCheckCount;
+  const rate = (countDelta * 1000) / elapsed;
+  el.rateMetric.textContent = `${rate.toFixed(1)} Hz`;
+  state.lastRateCheckCount = state.receivedSamples;
+  state.lastRateCheckTime = now;
+}
+
+function updateTable() {
+  el.sampleTableBody.replaceChildren(
+    ...state.tableRows.slice(0, 32).map((sample) => {
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${sample.seq}</td>
+        <td>${sample.format || "DATA"}</td>
+        <td>${sample.micros}</td>
+        <td>${Number.isFinite(sample.channel) ? `A${sample.channel}` : "--"}</td>
+        <td>${formatNumber(sample.raw, sample.valueUnit === "count" ? 0 : 3)}</td>
+        <td>${formatNumber(sample.millivolts, 2)}</td>
+        <td>${formatNumber(sample.filtered, sample.valueUnit === "count" ? 2 : 3)}</td>
+      `;
+      return row;
+    })
+  );
+}
+
+function drawPlot() {
+  if (state.activeView === "ppg") {
+    renderPpgView();
+    return;
+  }
+
+  if (state.activeView === "dataset") {
+    renderDatasetView();
+    return;
+  }
+  if (state.activeView === "model") {
+    renderModelView();
+    return;
+  }
+  if (state.activeView === "imu1d") {
+    drawImuSeriesPlot();
+    return;
+  }
+  if (state.activeView === "imu2d") {
+    drawImuPlanarPlot();
+    return;
+  }
+  if (state.activeView === "classification") {
+    drawClassificationPlot();
+    return;
+  }
+
+  const { width, height } = resizeCanvasToDisplaySize();
+  const compactPlot = width < 560;
+  const pad = compactPlot
+    ? { left: 34, right: 12, top: 18, bottom: 30 }
+    : { left: 58, right: 18, top: 18, bottom: 36 };
+  const plotWidth = width - pad.left - pad.right;
+  const plotHeight = height - pad.top - pad.bottom;
+
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = "#fbfcfd";
+  ctx.fillRect(0, 0, width, height);
+
+  drawGrid(width, height, pad, plotWidth, plotHeight);
+
+  syncAdcPlotSettings();
+  const visibleSamples = getVisibleAdcSamples();
+
+  if (visibleSamples.length < 2) {
+    ctx.fillStyle = "#637083";
+    ctx.font = "16px Segoe UI, Arial, sans-serif";
+    if (compactPlot) {
+      ctx.fillText("Connect and start", pad.left + 12, pad.top + 32);
+      ctx.fillText("streaming to view ADC data", pad.left + 12, pad.top + 54);
+    } else {
+      ctx.fillText("Connect and start streaming to view ADC data", pad.left + 12, pad.top + 32);
+    }
+    return;
+  }
+
+  const series = getAdcPlotSeries();
+  const values = series
+    .flatMap((item) => visibleSamples.map((sample) => getAdcPlotValue(sample, item.key)))
+    .filter(Number.isFinite);
+
+  let minY = 0;
+  let maxY = (1 << state.settings.resolution) - 1;
+  if (el.autoScaleToggle.checked && values.length > 0) {
+    minY = Math.min(...values);
+    maxY = Math.max(...values);
+    const padding = Math.max(10, (maxY - minY) * 0.12);
+    minY -= padding;
+    maxY += padding;
+  }
+  if (Math.abs(maxY - minY) < 1) {
+    maxY += 1;
+    minY -= 1;
+  }
+
+  for (const item of series) {
+    drawTrace(visibleSamples, item, minY, maxY, pad, plotWidth, plotHeight);
+  }
+
+  drawLegend(series, pad.left + 8, height - 10);
+  ctx.fillStyle = "#637083";
+  ctx.font = "12px Segoe UI, Arial, sans-serif";
+  ctx.fillText(`${maxY.toFixed(0)}`, 12, pad.top + 4);
+  ctx.fillText(`${minY.toFixed(0)}`, 12, height - pad.bottom);
+}
+
+function drawGrid(width, height, pad, plotWidth, plotHeight) {
+  drawGridOn(ctx, width, height, pad, plotWidth, plotHeight);
+}
+
+function drawGridOn(targetCtx, width, height, pad, plotWidth, plotHeight) {
+  targetCtx.strokeStyle = "#d7dee8";
+  targetCtx.lineWidth = 1;
+  targetCtx.beginPath();
+  for (let i = 0; i <= 5; i++) {
+    const y = pad.top + (plotHeight * i) / 5;
+    targetCtx.moveTo(pad.left, y);
+    targetCtx.lineTo(width - pad.right, y);
+  }
+  for (let i = 0; i <= 8; i++) {
+    const x = pad.left + (plotWidth * i) / 8;
+    targetCtx.moveTo(x, pad.top);
+    targetCtx.lineTo(x, height - pad.bottom);
+  }
+  targetCtx.stroke();
+
+  targetCtx.strokeStyle = "#bdc8d5";
+  targetCtx.strokeRect(pad.left, pad.top, plotWidth, plotHeight);
+}
+
+function drawTrace(samples, series, minY, maxY, pad, plotWidth, plotHeight) {
+  ctx.strokeStyle = series.color;
+  ctx.lineWidth = series.width;
+  ctx.beginPath();
+  let hasPoint = false;
+  samples.forEach((sample, index) => {
+    const value = getAdcPlotValue(sample, series.key);
+    if (!Number.isFinite(value)) {
+      return;
+    }
+    const x = pad.left + (plotWidth * index) / Math.max(1, samples.length - 1);
+    const normalized = (value - minY) / (maxY - minY);
+    const y = pad.top + plotHeight - normalized * plotHeight;
+    if (!hasPoint) {
+      ctx.moveTo(x, y);
+      hasPoint = true;
+    } else {
+      ctx.lineTo(x, y);
+    }
+  });
+  if (hasPoint) {
+    ctx.stroke();
+  }
+}
+
+function drawEmptyPlot(message) {
+  const { width, height } = resizeCanvasToDisplaySize();
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = "#fbfcfd";
+  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = "#637083";
+  ctx.font = "16px Segoe UI, Arial, sans-serif";
+  ctx.fillText(message, 24, 44);
+}
+
+function drawImuSeriesPlot() {
+  const { raw, processed } = getVisibleImuFrames();
+  const showRaw = el.showRawToggle.checked;
+  const showProcessed = el.showFilteredToggle.checked;
+  const rawOverlay = showRaw && (!showProcessed || state.settings.normalizeMode === "NONE");
+  if ((rawOverlay ? raw.length : 0) < 2 && (showProcessed ? processed.length : 0) < 2) {
+    drawEmptyPlot("Waiting for IMU data");
+    return;
+  }
+
+  const { width, height } = resizeCanvasToDisplaySize();
+  const pad = width < 560
+    ? { left: 38, right: 14, top: 18, bottom: 30 }
+    : { left: 58, right: 18, top: 18, bottom: 36 };
+  const plotWidth = width - pad.left - pad.right;
+  const plotHeight = height - pad.top - pad.bottom;
+  const axes = [
+    { key: "ax", color: "#008c8c", label: "ax" },
+    { key: "ay", color: "#d28a00", label: "ay" },
+    { key: "az", color: "#2767c9", label: "az" }
+  ];
+  const values = [
+    ...(rawOverlay ? raw.flatMap((sample) => axes.map((axis) => sample[axis.key])) : []),
+    ...(showProcessed ? processed.flatMap((sample) => IMU_PROCESSED_AXES.map((axis) => sample[axis])) : [])
+  ];
+  const maxAbs = Math.max(0.25, ...values.map((value) => Math.abs(value)));
+  const minY = -maxAbs;
+  const maxY = maxAbs;
+
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = "#fbfcfd";
+  ctx.fillRect(0, 0, width, height);
+  drawGrid(width, height, pad, plotWidth, plotHeight);
+
+  if (rawOverlay) {
+    for (const axis of axes) {
+      drawImuLine(raw, axis.key, axis.color, minY, maxY, pad, plotWidth, plotHeight, 1.3, 0.38);
+    }
+  }
+
+  if (showProcessed) {
+    const processedAxes = [
+      { key: "pax", color: "#008c8c", label: "px" },
+      { key: "pay", color: "#d28a00", label: "py" },
+      { key: "paz", color: "#2767c9", label: "pz" }
+    ];
+    for (const axis of processedAxes) {
+      drawImuLine(processed, axis.key, axis.color, minY, maxY, pad, plotWidth, plotHeight, 2.4, 1);
+    }
+  }
+
+  drawLegend(showProcessed
+    ? [
+        { color: "#008c8c", label: "x" },
+        { color: "#d28a00", label: "y" },
+        { color: "#2767c9", label: "z" }
+      ]
+    : axes, pad.left + 8, pad.top + 18);
+}
+
+function drawImuLine(samples, key, color, minY, maxY, pad, plotWidth, plotHeight, width, alpha) {
+  if (samples.length < 2) {
+    return;
+  }
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.beginPath();
+  samples.forEach((sample, index) => {
+    const x = pad.left + (plotWidth * index) / Math.max(1, samples.length - 1);
+    const normalized = (sample[key] - minY) / (maxY - minY);
+    const y = pad.top + plotHeight - normalized * plotHeight;
+    if (index === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+  });
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawImuPlanarPlot() {
+  const { raw, processed } = getVisibleImuFrames();
+  const showRaw = el.showRawToggle.checked;
+  const showProcessed = el.showFilteredToggle.checked;
+  const rawOverlay = showRaw && (!showProcessed || state.settings.normalizeMode === "NONE");
+  const primarySamples = showProcessed && processed.length >= 2 ? processed : raw;
+  const primaryKeys = showProcessed && processed.length >= 2
+    ? { ax: "pax", ay: "pay", az: "paz" }
+    : { ax: "ax", ay: "ay", az: "az" };
+  if ((rawOverlay ? raw.length : 0) < 2 && (showProcessed ? processed.length : 0) < 2) {
+    drawEmptyPlot("Waiting for IMU data");
+    return;
+  }
+
+  const { width, height } = resizeCanvasToDisplaySize();
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = "#fbfcfd";
+  ctx.fillRect(0, 0, width, height);
+
+  const planes = [
+    { label: "XY", xAxis: "ax", yAxis: "ay", xLabel: "x", yLabel: "y", color: "#008c8c" },
+    { label: "YZ", xAxis: "ay", yAxis: "az", xLabel: "y", yLabel: "z", color: "#d28a00" },
+    { label: "ZA", xAxis: "az", yAxis: "ax", xLabel: "z", yLabel: "x", color: "#2767c9" }
+  ];
+  const columns = width < 760 ? 1 : 3;
+  const rows = Math.ceil(planes.length / columns);
+  const outerPad = width < 760
+    ? { left: 18, right: 18, top: 18, bottom: 18 }
+    : { left: 26, right: 26, top: 24, bottom: 24 };
+  const gap = width < 760 ? 12 : 16;
+  const panelWidth = (width - outerPad.left - outerPad.right - gap * (columns - 1)) / columns;
+  const panelHeight = (height - outerPad.top - outerPad.bottom - gap * (rows - 1)) / rows;
+  const autoScale = el.autoScaleToggle.checked;
+
+  function average(samples, key) {
+    return samples.reduce((sum, sample) => sum + sample[key], 0) / samples.length;
+  }
+
+  for (const [planeIndex, plane] of planes.entries()) {
+    const column = planeIndex % columns;
+    const row = Math.floor(planeIndex / columns);
+    const left = outerPad.left + column * (panelWidth + gap);
+    const top = outerPad.top + row * (panelHeight + gap);
+    const innerPad = { left: 34, right: 18, top: 34, bottom: 28 };
+    const plotLeft = left + innerPad.left;
+    const plotTop = top + innerPad.top;
+    const plotWidth = panelWidth - innerPad.left - innerPad.right;
+    const plotHeight = panelHeight - innerPad.top - innerPad.bottom;
+    const centerX = plotLeft + plotWidth / 2;
+    const centerY = plotTop + plotHeight / 2;
+    const xKey = primaryKeys[plane.xAxis];
+    const yKey = primaryKeys[plane.yAxis];
+    const xCenter = autoScale ? average(primarySamples, xKey) : 0;
+    const yCenter = autoScale ? average(primarySamples, yKey) : 0;
+    const range = Math.max(
+      autoScale ? 0.08 : 1,
+      ...primarySamples.flatMap((sample) => [
+        Math.abs(sample[xKey] - xCenter),
+        Math.abs(sample[yKey] - yCenter)
+      ])
+    );
+    const scale = Math.min(plotWidth, plotHeight) * 0.44;
+
+    ctx.fillStyle = "#ffffff";
+    ctx.strokeStyle = "#d7dee8";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(left, top, panelWidth, panelHeight, 6);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = "#d7dee8";
+    ctx.beginPath();
+    ctx.moveTo(plotLeft, centerY);
+    ctx.lineTo(plotLeft + plotWidth, centerY);
+    ctx.moveTo(centerX, plotTop);
+    ctx.lineTo(centerX, plotTop + plotHeight);
+    ctx.stroke();
+
+    ctx.strokeStyle = "#bdc8d5";
+    ctx.strokeRect(plotLeft, plotTop, plotWidth, plotHeight);
+
+    if (rawOverlay) {
+      drawPlanarTrace(raw, plane.xAxis, plane.yAxis, xCenter, yCenter, range, scale, centerX, centerY, "#14242b", 1.2, 0.28);
+    }
+    if (showProcessed) {
+      drawPlanarTrace(processed, primaryKeys[plane.xAxis], primaryKeys[plane.yAxis], xCenter, yCenter, range, scale, centerX, centerY, plane.color, 2.6, 1);
+    }
+
+    const latest = primarySamples[primarySamples.length - 1];
+    const latestX = centerX + ((latest[xKey] - xCenter) / range) * scale;
+    const latestY = centerY - ((latest[yKey] - yCenter) / range) * scale;
+    ctx.fillStyle = showProcessed ? plane.color : "#14242b";
+    ctx.beginPath();
+    ctx.arc(latestX, latestY, 6, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#17202a";
+    ctx.font = "700 13px Segoe UI, Arial, sans-serif";
+    ctx.fillText(plane.label, left + 12, top + 20);
+    ctx.fillStyle = "#637083";
+    ctx.font = "12px Segoe UI, Arial, sans-serif";
+    ctx.fillText(plane.xLabel, plotLeft + plotWidth - 16, centerY - 8);
+    ctx.fillText(plane.yLabel, centerX + 8, plotTop + 14);
+    ctx.fillText(autoScale ? `+/-${range.toFixed(2)} ${getInputUnits()} from mean` : `+/-${range.toFixed(2)} ${getInputUnits()}`, left + 42, top + 20);
+  }
+}
+
+function drawPlanarTrace(samples, xKey, yKey, xCenter, yCenter, range, scale, centerX, centerY, color, width, alpha) {
+  if (samples.length < 2) {
+    return;
+  }
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.beginPath();
+  samples.forEach((sample, index) => {
+    const x = centerX + ((sample[xKey] - xCenter) / range) * scale;
+    const y = centerY - ((sample[yKey] - yCenter) / range) * scale;
+    if (index === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+  });
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawImu3dPlot() {
+  const { raw, processed } = getVisibleImuFrames();
+  const showRaw = el.showRawToggle.checked;
+  const showProcessed = el.showFilteredToggle.checked;
+  const rawOverlay = showRaw && (!showProcessed || state.settings.normalizeMode === "NONE");
+  const samples = showProcessed && processed.length >= 2 ? processed : raw;
+  const keys = showProcessed && processed.length >= 2
+    ? { ax: "pax", ay: "pay", az: "paz" }
+    : { ax: "ax", ay: "ay", az: "az" };
+  if ((rawOverlay ? raw.length : 0) < 2 && (showProcessed ? processed.length : 0) < 2) {
+    drawEmptyPlot("Waiting for IMU data");
+    return;
+  }
+
+  const { width, height } = resizeCanvasToDisplaySize();
+  const autoScale = el.autoScaleToggle.checked;
+  const center = autoScale
+    ? {
+        ax: samples.reduce((sum, sample) => sum + sample[keys.ax], 0) / samples.length,
+        ay: samples.reduce((sum, sample) => sum + sample[keys.ay], 0) / samples.length,
+        az: samples.reduce((sum, sample) => sum + sample[keys.az], 0) / samples.length
+      }
+    : { ax: 0, ay: 0, az: 0 };
+  const range = Math.max(
+    autoScale ? 0.08 : 1,
+    ...samples.flatMap((sample) => [
+      Math.abs(sample[keys.ax] - center.ax),
+      Math.abs(sample[keys.ay] - center.ay),
+      Math.abs(sample[keys.az] - center.az)
+    ])
+  );
+
+  function projectVector(x, y, z) {
+    const nx = x / range;
+    const ny = y / range;
+    const nz = z / range;
+    return {
+      x: (nx - ny) * 0.82,
+      y: (nx + ny) * 0.40 - nz * 0.92
+    };
+  }
+
+  const tracePoints = samples.map((sample) => projectVector(
+    sample[keys.ax] - center.ax,
+    sample[keys.ay] - center.ay,
+    sample[keys.az] - center.az
+  ));
+  const origin = projectVector(0, 0, 0);
+  const axes = [
+    { end: projectVector(range, 0, 0), color: "#008c8c", label: "x" },
+    { end: projectVector(0, range, 0), color: "#d28a00", label: "y" },
+    { end: projectVector(0, 0, range), color: "#2767c9", label: "z" }
+  ];
+  const fitPoints = [origin, ...axes.map((axis) => axis.end), ...tracePoints];
+  const minX = Math.min(...fitPoints.map((point) => point.x));
+  const maxX = Math.max(...fitPoints.map((point) => point.x));
+  const minY = Math.min(...fitPoints.map((point) => point.y));
+  const maxY = Math.max(...fitPoints.map((point) => point.y));
+  const pad = width < 760
+    ? { left: 26, right: 26, top: 28, bottom: 34 }
+    : { left: 48, right: 48, top: 38, bottom: 44 };
+  const plotWidth = width - pad.left - pad.right;
+  const plotHeight = height - pad.top - pad.bottom;
+  const fitScale = Math.min(
+    plotWidth / Math.max(0.1, maxX - minX),
+    plotHeight / Math.max(0.1, maxY - minY)
+  ) * 0.84;
+  const fitCenterX = (minX + maxX) / 2;
+  const fitCenterY = (minY + maxY) / 2;
+  const screenCenterX = pad.left + plotWidth / 2;
+  const screenCenterY = pad.top + plotHeight / 2;
+
+  function toScreen(point) {
+    return {
+      x: screenCenterX + (point.x - fitCenterX) * fitScale,
+      y: screenCenterY + (point.y - fitCenterY) * fitScale
+    };
+  }
+
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = "#fbfcfd";
+  ctx.fillRect(0, 0, width, height);
+  ctx.strokeStyle = "#d7dee8";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(pad.left, pad.top, plotWidth, plotHeight);
+
+  const originPoint = toScreen(origin);
+  for (const axis of axes) {
+    const end = toScreen(axis.end);
+    ctx.strokeStyle = axis.color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(originPoint.x, originPoint.y);
+    ctx.lineTo(end.x, end.y);
+    ctx.stroke();
+    ctx.fillStyle = axis.color;
+    ctx.font = "700 13px Segoe UI, Arial, sans-serif";
+    ctx.fillText(axis.label, end.x + 6, end.y);
+  }
+
+  if (rawOverlay && showProcessed && raw.length >= 2) {
+    const rawTracePoints = raw.map((sample) => projectVector(
+      sample.ax - center.ax,
+      sample.ay - center.ay,
+      sample.az - center.az
+    ));
+    ctx.save();
+    ctx.globalAlpha = 0.26;
+    ctx.strokeStyle = "#14242b";
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    rawTracePoints.forEach((tracePoint, index) => {
+      const point = toScreen(tracePoint);
+      if (index === 0) {
+        ctx.moveTo(point.x, point.y);
+      } else {
+        ctx.lineTo(point.x, point.y);
+      }
+    });
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  ctx.strokeStyle = showProcessed ? "#14242b" : "#008c8c";
+  ctx.lineWidth = 3;
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  tracePoints.forEach((tracePoint, index) => {
+    const point = toScreen(tracePoint);
+    if (index === 0) {
+      ctx.moveTo(point.x, point.y);
+    } else {
+      ctx.lineTo(point.x, point.y);
+    }
+  });
+  ctx.stroke();
+
+  const latest = samples[samples.length - 1];
+  const latestPoint = toScreen(projectVector(
+    latest[keys.ax] - center.ax,
+    latest[keys.ay] - center.ay,
+    latest[keys.az] - center.az
+  ));
+  ctx.fillStyle = "#d28a00";
+  ctx.beginPath();
+  ctx.arc(latestPoint.x, latestPoint.y, 7, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#637083";
+  ctx.font = "12px Segoe UI, Arial, sans-serif";
+  ctx.fillText(autoScale ? `3D auto zoom: +/-${range.toFixed(2)} ${getInputUnits()} from mean` : `3D scale: +/-${range.toFixed(2)} ${getInputUnits()}`, pad.left + 12, pad.top + 20);
+}
+
+function drawClassificationInputWindowPlot(inputWindow, area) {
+  const samples = inputWindow.frames;
+  ctx.fillStyle = "#ffffff";
+  ctx.strokeStyle = "#d7dee8";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(area.x, area.y, area.width, area.height, 6);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = "#17202a";
+  ctx.font = "700 13px Segoe UI, Arial, sans-serif";
+  ctx.fillText("Input data window", area.x + 12, area.y + 20);
+  ctx.fillStyle = "#637083";
+  ctx.font = "12px Segoe UI, Arial, sans-serif";
+  const seqText = inputWindow.first && inputWindow.latest
+    ? `seq ${inputWindow.first.seq}-${inputWindow.latest.seq}`
+    : "no IMU window";
+  ctx.fillText(`${inputWindow.available}/${inputWindow.windowSize} ${inputWindow.sourceName} samples - ${seqText}`, area.x + 142, area.y + 20);
+
+  const plotLeft = area.x + 42;
+  const plotTop = area.y + 34;
+  const plotWidth = Math.max(80, area.width - 58);
+  const plotHeight = Math.max(60, area.height - 58);
+  ctx.strokeStyle = "#eef3f7";
+  ctx.beginPath();
+  for (let i = 0; i <= 4; i++) {
+    const y = plotTop + (plotHeight * i) / 4;
+    ctx.moveTo(plotLeft, y);
+    ctx.lineTo(plotLeft + plotWidth, y);
+  }
+  for (let i = 0; i <= 8; i++) {
+    const x = plotLeft + (plotWidth * i) / 8;
+    ctx.moveTo(x, plotTop);
+    ctx.lineTo(x, plotTop + plotHeight);
+  }
+  ctx.stroke();
+  ctx.strokeStyle = "#bdc8d5";
+  ctx.strokeRect(plotLeft, plotTop, plotWidth, plotHeight);
+
+  if (samples.length < 2) {
+    ctx.fillStyle = "#637083";
+    ctx.font = "13px Segoe UI, Arial, sans-serif";
+    ctx.fillText("Waiting for enough IMU samples", plotLeft + 12, plotTop + 30);
+    return;
+  }
+
+  const axes = [
+    { key: inputWindow.keys.ax, label: "x", color: "#008c8c" },
+    { key: inputWindow.keys.ay, label: "y", color: "#d28a00" },
+    { key: inputWindow.keys.az, label: "z", color: "#2767c9" }
+  ];
+  const values = samples.flatMap((sample) => axes.map((axis) => sample[axis.key])).filter(Number.isFinite);
+  const maxAbs = Math.max(0.25, ...values.map((value) => Math.abs(value)));
+  const minY = -maxAbs;
+  const maxY = maxAbs;
+
+  for (const axis of axes) {
+    ctx.strokeStyle = axis.color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    samples.forEach((sample, index) => {
+      const x = plotLeft + (plotWidth * index) / Math.max(1, samples.length - 1);
+      const y = plotTop + plotHeight - ((sample[axis.key] - minY) / (maxY - minY)) * plotHeight;
+      if (index === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    });
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = "#637083";
+  ctx.font = "11px Segoe UI, Arial, sans-serif";
+  ctx.fillText(`+/-${maxAbs.toFixed(2)} ${getInputUnits()}`, plotLeft + 8, plotTop + 16);
+  drawLegendOn(ctx, axes, plotLeft + 8, plotTop + plotHeight - 8);
+}
+
+function drawClassificationScoreBars(scores, area) {
+  ctx.fillStyle = "#17202a";
+  ctx.font = "700 13px Segoe UI, Arial, sans-serif";
+  ctx.fillText("Inference scores", area.x + 12, area.y + 20);
+
+  if (scores.length === 0) {
+    ctx.fillStyle = "#637083";
+    ctx.font = "14px Segoe UI, Arial, sans-serif";
+    ctx.fillText(state.classification.active
+      ? "Collecting inference window - first result takes about 2 s"
+      : "Press Start + Class or Start Class to run inference", area.x + 12, area.y + 52);
+    return;
+  }
+
+  const pad = {
+    left: area.x + (area.width < 680 ? 112 : 170),
+    right: area.x + area.width - 20,
+    top: area.y + 32,
+    bottom: area.y + area.height - 10
+  };
+  const rowHeight = Math.min(30, (pad.bottom - pad.top) / scores.length);
+  const barWidth = Math.max(80, pad.right - pad.left);
+
+  ctx.font = "12px Segoe UI, Arial, sans-serif";
+  scores.forEach((score, index) => {
+    const y = pad.top + index * rowHeight;
+    const percent = Math.max(0, Math.min(1, score.value));
+    ctx.fillStyle = "#637083";
+    const label = score.label.length > 22 ? `${score.label.slice(0, 21)}...` : score.label;
+    ctx.fillText(label, area.x + 12, y + rowHeight * 0.62);
+    ctx.fillStyle = "#eef3f7";
+    ctx.fillRect(pad.left, y + 7, barWidth, Math.max(8, rowHeight - 14));
+    ctx.fillStyle = index === 0 ? "#008c8c" : "#2767c9";
+    ctx.fillRect(pad.left, y + 7, barWidth * percent, Math.max(8, rowHeight - 14));
+    ctx.fillStyle = "#17202a";
+    ctx.fillText(`${(percent * 100).toFixed(1)}%`, pad.left + 8, y + rowHeight * 0.62);
+  });
+}
+
+function drawClassificationPlot() {
+  const scores = [...(state.classification.scores || [])]
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 10);
+  const inputWindow = getClassificationInputWindow();
+  const { width, height } = resizeCanvasToDisplaySize();
+  const gap = 14;
+  const inputHeight = Math.max(168, Math.round(height * 0.52));
+  const scoreHeight = Math.max(112, height - inputHeight - gap - 24);
+  const areaX = 16;
+  const areaWidth = width - 32;
+
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = "#fbfcfd";
+  ctx.fillRect(0, 0, width, height);
+
+  drawClassificationInputWindowPlot(inputWindow, {
+    x: areaX,
+    y: 16,
+    width: areaWidth,
+    height: inputHeight
+  });
+  drawClassificationScoreBars(scores, {
+    x: areaX,
+    y: 16 + inputHeight + gap,
+    width: areaWidth,
+    height: scoreHeight
+  });
+}
+
+function drawLegend(items, x, y) {
+  drawLegendOn(ctx, items, x, y);
+}
+
+function drawLegendOn(targetCtx, items, x, y) {
+  let offsetX = x;
+  items.forEach((item) => {
+    targetCtx.fillStyle = item.color;
+    targetCtx.fillRect(offsetX, y - 9, 16, 3);
+    targetCtx.fillStyle = "#637083";
+    targetCtx.font = "12px Segoe UI, Arial, sans-serif";
+    targetCtx.fillText(item.label, offsetX + 20, y - 4);
+    offsetX += Math.max(58, 28 + item.label.length * 7);
+  });
+}
+
+async function applyAcquisition() {
+  state.settings.channel = normalizeNumber(el.channelSelect.value, 0, 0, 7);
+  state.settings.rateHz = normalizeNumber(el.rateInput.value, 100, 1, 1000);
+  state.settings.resolution = normalizeNumber(el.resolutionSelect.value, 12, 10, 12);
+  updateAdcWindowInputFromSamples(state.settings.window);
+
+  await sendCommand(`STOP`);
+  await sendCommand(`RES ${state.settings.resolution}`);
+  await sendCommand(`CH ${state.settings.channel}`);
+  await sendCommand(`RATE ${state.settings.rateHz}`);
+}
+
+async function applyFilter() {
+  const params = syncDspSettingsFromControls({ writeBack: true });
+  const protocol = resolveDspProtocol();
+
+  if (protocol === "DAY2_IIR") {
+    await sendCommand(`RATE ${params.sampleRateHz.toFixed(1)}`);
+    await sendCommand(`MODE ${day2IirModeName(params.mode)}`);
+    await sendCommand(`ORDER ${params.order}`);
+    await sendCommand(`LOW ${params.lowHz.toFixed(3)}`);
+    await sendCommand(`HIGH ${params.highHz.toFixed(3)}`);
+  } else {
+    await sendCommand(`FILTER ${state.settings.filter}`);
+    await sendCommand(`ALPHA ${state.settings.alpha.toFixed(3)}`);
+    await sendCommand(`WINDOW ${state.settings.window}`);
+    if (state.settings.filter.startsWith("IIR_")) {
+      await sendCommand(`IIRORDER ${state.settings.iirOrder}`);
+      await sendCommand(`IIRHIGH ${state.settings.iirHighHz.toFixed(3)}`);
+      await sendCommand(`IIRLOW ${state.settings.iirLowHz.toFixed(3)}`);
+    }
+  }
+
+  if (state.ppg.source === "Live ADC") {
+    clearLivePpgWindow(state.settings.filter === "RAW" ? "raw" : "filtered");
+  }
+  updateFilterStateText();
+  renderDspPanel({ writeBack: true });
+  logLine(`DSP_APPLY,protocol=${protocol},mode=${params.mode},order=${params.order},low=${params.lowHz.toFixed(3)},high=${params.highHz.toFixed(3)}`);
+}
+
+function applyInputPreprocess() {
+  const maxCutoff = Math.max(0.01, getInputSampleRateHz() * 0.45);
+  state.settings.inputWindowSamples = Math.round(normalizeNumber(el.inputWindowInput.value, 125, 16, MAX_IMU_POINTS));
+  state.settings.inputFilter = el.inputFilterSelect.value;
+  state.settings.normalizeMode = el.normalizeSelect.value;
+  state.settings.inputAlpha = normalizeNumber(el.inputAlphaInput.value, 0.2, 0.001, 1);
+  state.settings.inputMaWindow = Math.round(normalizeNumber(el.inputMaWindowInput.value, 5, 1, 128));
+  state.settings.inputIirOrder = Math.round(normalizeNumber(el.inputIirOrderInput.value, 2, 1, 4));
+  state.settings.inputIirHighHz = normalizeNumber(el.inputIirHighInput.value, 8.0, 0.02, maxCutoff);
+  state.settings.inputIirLowHz = Math.min(
+    normalizeNumber(el.inputIirLowInput.value, 0.5, 0.01, maxCutoff),
+    Math.max(0.01, state.settings.inputIirHighHz - 0.01)
+  );
+
+  el.inputWindowInput.value = String(state.settings.inputWindowSamples);
+  el.inputAlphaInput.value = String(state.settings.inputAlpha);
+  el.inputAlphaOutput.textContent = state.settings.inputAlpha.toFixed(3);
+  el.inputMaWindowInput.value = String(state.settings.inputMaWindow);
+  el.inputIirOrderInput.value = String(state.settings.inputIirOrder);
+  el.inputIirLowInput.value = state.settings.inputIirLowHz.toFixed(2);
+  el.inputIirHighInput.value = state.settings.inputIirHighHz.toFixed(2);
+  el.inputState.textContent = `${state.settings.inputWindowSamples} win`;
+
+  rebuildImuProcessing();
+  logLine(`INPUT,window=${state.settings.inputWindowSamples},filter=${state.settings.inputFilter},normalize=${state.settings.normalizeMode}`);
+  updateCurrentMetrics();
+  drawPlot();
+}
+
+async function startStreaming() {
+  if (state.activeView === "classification") {
+    state.settings.rateHz = normalizeNumber(el.rateInput.value, 63, 1, 200);
+    applyInputPreprocess();
+    state.classification.startPending = true;
+    renderClassification();
+    await sendCommand(`RATE ${state.settings.rateHz}`);
+    await sendCommand("CLS ON");
+    await sendCommand("START");
+    return;
+  }
+
+  if (state.activeView === "ppg") {
+    await applyAcquisition();
+    await applyFilter();
+    await sendCommand("START");
+    return;
+  }
+
+  if (state.activeView !== "adc") {
+    state.settings.rateHz = normalizeNumber(el.rateInput.value, 63, 1, 200);
+    applyInputPreprocess();
+    await sendCommand(`RATE ${state.settings.rateHz}`);
+    await sendCommand("START");
+    return;
+  }
+
+  await applyAcquisition();
+  await applyFilter();
+  await sendCommand("START");
+}
+
+async function stopStreaming() {
+  if (state.activeView === "classification") {
+    await sendCommand("CLS OFF");
+  }
+  await sendCommand("STOP");
+}
+
+function clearData() {
+  state.samples = [];
+  state.adcFormatCounts = Object.fromEntries(ADC_FORMATS.map((format) => [format, 0]));
+  state.adcSyntheticSeq = 0;
+  state.imuSamples = [];
+  state.imuProcessedSamples = [];
+  state.records = [];
+  state.tableRows = [];
+  state.latestSample = null;
+  state.latestImu = null;
+  state.latestProcessedImu = null;
+  if (state.ppg.source === "Live ADC") {
+    clearLivePpgWindow(state.settings.filter === "RAW" ? "raw" : "filtered");
+  }
+  resetPreprocessState();
+  state.renderPending = false;
+  state.lastRenderTime = performance.now();
+  state.lastTableRenderTime = 0;
+  state.receivedSamples = 0;
+  state.receivedImuSamples = 0;
+  state.lastRateCheckCount = 0;
+  state.lastRateCheckTime = performance.now();
+  state.lastImuRateCheckCount = 0;
+  state.lastImuRateCheckTime = performance.now();
+  el.sampleCount.textContent = "0 samples";
+  el.recordCount.textContent = "0 rows";
+  el.rawMetric.textContent = "--";
+  el.filteredMetric.textContent = "--";
+  el.voltageMetric.textContent = "--";
+  el.rateMetric.textContent = "--";
+  el.plotMeta.textContent = "Waiting for device data";
+  el.lastTimestamp.textContent = "No data";
+  updateAdcFormatState();
+  updateTable();
+  drawPlot();
+  setUiEnabled();
+}
+
+function toggleRecording() {
+  state.recording = !state.recording;
+  setUiEnabled();
+}
+
+async function startClassification() {
+  state.classification.startPending = true;
+  renderClassification();
+  setUiEnabled();
+  await sendCommand("CLS ON");
+}
+
+async function stopClassification() {
+  state.classification.startPending = false;
+  state.classification.active = false;
+  renderClassification();
+  await sendCommand("CLS OFF");
+}
+
+function exportCsv() {
+  const header = [
+    "label",
+    "type",
+    "format",
+    "format_detail",
+    "seq",
+    "micros",
+    "channel",
+    "raw",
+    "millivolts",
+    "filtered",
+    "ax_g",
+    "ay_g",
+    "az_g",
+    "proc_ax",
+    "proc_ay",
+    "proc_az",
+    "gyro_x_dps",
+    "gyro_y_dps",
+    "gyro_z_dps",
+    "mag_x_uT",
+    "mag_y_uT",
+    "mag_z_uT",
+    "input_window",
+    "input_filter",
+    "normalize",
+    "received_at_iso"
+  ].join(",") + "\n";
+  const rows = state.records.map((row) => [
+    csvCell(row.label),
+    csvCell(row.kind || "adc"),
+    csvCell(row.format || ""),
+    csvCell(row.formatDetail || ""),
+    row.seq,
+    row.micros,
+    row.kind === "imu" ? "" : `A${row.channel}`,
+    row.raw ?? "",
+    Number.isFinite(row.millivolts) ? row.millivolts.toFixed(3) : "",
+    Number.isFinite(row.filtered) ? row.filtered.toFixed(3) : "",
+    Number.isFinite(row.ax) ? row.ax.toFixed(6) : "",
+    Number.isFinite(row.ay) ? row.ay.toFixed(6) : "",
+    Number.isFinite(row.az) ? row.az.toFixed(6) : "",
+    Number.isFinite(row.pax) ? row.pax.toFixed(6) : "",
+    Number.isFinite(row.pay) ? row.pay.toFixed(6) : "",
+    Number.isFinite(row.paz) ? row.paz.toFixed(6) : "",
+    Number.isFinite(row.gx) ? row.gx.toFixed(6) : "",
+    Number.isFinite(row.gy) ? row.gy.toFixed(6) : "",
+    Number.isFinite(row.gz) ? row.gz.toFixed(6) : "",
+    Number.isFinite(row.mx) ? row.mx.toFixed(6) : "",
+    Number.isFinite(row.my) ? row.my.toFixed(6) : "",
+    Number.isFinite(row.mz) ? row.mz.toFixed(6) : "",
+    row.preWindow ?? "",
+    csvCell(row.preFilter ?? ""),
+    csvCell(row.normalize ?? ""),
+    new Date(row.receivedAt).toISOString()
+  ].join(","));
+  const blob = new Blob([header, rows.join("\n"), "\n"], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  link.href = url;
+  link.download = `keti_lab_samples_${stamp}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function csvCell(value) {
+  const text = String(value ?? "");
+  if (/[",\n]/.test(text)) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+  return text;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function bindEvents() {
+  el.connectButton.addEventListener("click", connectDevice);
+  el.disconnectButton.addEventListener("click", disconnectDevice);
+  el.startButton.addEventListener("click", startStreaming);
+  el.stopButton.addEventListener("click", stopStreaming);
+  el.applyAcquisitionButton.addEventListener("click", applyAcquisition);
+  el.applyFilterButton.addEventListener("click", applyFilter);
+  el.applyInputButton.addEventListener("click", applyInputPreprocess);
+  el.datasetCaptureButton.addEventListener("click", toggleDatasetCapture);
+  el.datasetCaptureOneButton.addEventListener("click", () => captureDatasetWindow("manual"));
+  el.datasetExportJsonButton.addEventListener("click", exportDatasetJson);
+  el.datasetExportCsvButton.addEventListener("click", exportDatasetCsv);
+  el.datasetClearButton.addEventListener("click", clearDataset);
+  el.datasetImportInput.addEventListener("change", importDatasetJson);
+  if (el.ppgLoadSampleButton) {
+    el.ppgLoadSampleButton.addEventListener("click", loadBundledPpgCsv);
+  }
+  if (el.ppgAnalyzeButton) {
+    el.ppgAnalyzeButton.addEventListener("click", () => {
+      try {
+        runPpgAnalysis();
+      } catch (error) {
+        state.ppg.error = error.message;
+        el.ppgStatus.textContent = "Analyze failed";
+        logLine(`ERR,ppg_analyze,${error.message}`);
+        renderPpgView();
+      } finally {
+        setUiEnabled();
+      }
+    });
+  }
+  if (el.ppgFileInput) {
+    el.ppgFileInput.addEventListener("change", importPpgCsv);
+  }
+  [el.ppgSampleRateInput, el.ppgStartInput, el.ppgDurationInput, el.ppgRefractoryInput].filter(Boolean).forEach((node) => {
+    node.addEventListener("change", () => {
+      if (state.ppg.samples.length > 0) {
+        try {
+          runPpgAnalysis({ silent: state.ppg.source === "Live ADC" });
+        } catch (error) {
+          state.ppg.analysis = null;
+          state.ppg.error = error.message;
+          el.ppgStatus.textContent = "Analyze failed";
+          logLine(`ERR,ppg_analyze,${error.message}`);
+          renderPpgView();
+        }
+      } else {
+        renderPpgView();
+      }
+      setUiEnabled();
+    });
+  });
+  el.ppgThresholdInput.addEventListener("input", () => {
+    el.ppgThresholdOutput.textContent = Number(el.ppgThresholdInput.value).toFixed(2);
+  });
+  el.ppgThresholdInput.addEventListener("change", () => {
+    if (state.ppg.samples.length > 0) {
+      try {
+        runPpgAnalysis({ silent: state.ppg.source === "Live ADC" });
+      } catch (error) {
+        state.ppg.analysis = null;
+        state.ppg.error = error.message;
+        el.ppgStatus.textContent = "Analyze failed";
+        logLine(`ERR,ppg_analyze,${error.message}`);
+        renderPpgView();
+      }
+    }
+    setUiEnabled();
+  });
+  [el.datasetWindowInput, el.datasetStrideInput, el.datasetFeatureSelect, el.datasetSourceSelect].forEach((node) => {
+    node.addEventListener("input", () => {
+      renderDatasetView();
+      renderModelView();
+      setUiEnabled();
+    });
+    node.addEventListener("change", () => {
+      renderDatasetView();
+      renderModelView();
+      setUiEnabled();
+    });
+  });
+  [el.hiddenLayerInput, el.neuronInput].forEach((node) => {
+    node.addEventListener("input", renderModelView);
+    node.addEventListener("change", renderModelView);
+  });
+  el.trainModelButton.addEventListener("click", trainBrowserModel);
+  el.exportModelJsonButton.addEventListener("click", exportModelJson);
+  el.exportCArrayButton.addEventListener("click", exportCArray);
+  el.pingButton.addEventListener("click", () => sendCommand("PING"));
+  el.classStartButton.addEventListener("click", startClassification);
+  el.classStopButton.addEventListener("click", stopClassification);
+  el.recordButton.addEventListener("click", toggleRecording);
+  el.clearButton.addEventListener("click", clearData);
+  el.exportButton.addEventListener("click", exportCsv);
+  el.flashButton.addEventListener("click", flashFirmware);
+  el.bootloaderButton.addEventListener("click", enterBootloaderDirect);
+  el.showRawToggle.addEventListener("change", drawPlot);
+  el.showFilteredToggle.addEventListener("change", drawPlot);
+  el.autoScaleToggle.addEventListener("change", drawPlot);
+  el.adcFormatSelect.addEventListener("change", () => {
+    syncAdcPlotSettings();
+    updateCurrentMetrics();
+    drawPlot();
+  });
+  el.adcPlotModeSelect.addEventListener("change", () => {
+    syncAdcPlotSettings();
+    drawPlot();
+  });
+  [el.filterSelect, el.dspProtocolSelect, el.alphaInput, el.windowInput, el.iirOrderInput, el.iirLowInput, el.iirHighInput, el.rateInput]
+    .filter(Boolean)
+    .forEach((node) => {
+      const updateDspPreview = () => {
+        el.alphaOutput.textContent = Number(el.alphaInput.value).toFixed(3);
+        renderDspPanel();
+      };
+      node.addEventListener("input", updateDspPreview);
+      node.addEventListener("change", () => renderDspPanel({ writeBack: true }));
+    });
+  for (const tab of el.viewTabs) {
+    tab.addEventListener("click", () => setActiveView(tab.dataset.view));
+  }
+  window.addEventListener("resize", drawPlot);
+  el.alphaInput.addEventListener("input", () => {
+    el.alphaOutput.textContent = Number(el.alphaInput.value).toFixed(3);
+    renderDspPanel();
+  });
+  el.inputAlphaInput.addEventListener("input", () => {
+    el.inputAlphaOutput.textContent = Number(el.inputAlphaInput.value).toFixed(3);
+  });
+  el.pruningInput.addEventListener("input", () => {
+    el.pruningOutput.textContent = `${(Number(el.pruningInput.value) * 100).toFixed(0)}%`;
+  });
+}
+
+function init() {
+  if ("serial" in navigator) {
+    setStatus(el.browserStatus, "Web Serial ready", "");
+  } else {
+    setStatus(el.browserStatus, "Web Serial unavailable", "error");
+  }
+  populateFirmwareSelect(DEFAULT_PREBUILT_FIRMWARES);
+  bindEvents();
+  updateAdcWindowInputFromSamples(state.settings.window);
+  syncAdcPlotSettings();
+  renderDspPanel({ writeBack: true });
+  applyInputPreprocess();
+  updateViewVisibility();
+  renderDatasetView();
+  renderModelView();
+  setUiEnabled();
+  renderClassification();
+  drawPlot();
+  loadDirectFirmwareManifest();
+}
+
+init();

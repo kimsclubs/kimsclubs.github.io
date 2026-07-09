@@ -113,6 +113,55 @@
         </aside>
 
         <section class="plot-panel">
+          <section id="deviceLogSection" class="device-log-section adc-line-inspector">
+            <div class="panel-header compact">
+              <div>
+                <h2>Device Log</h2>
+                <span id="adcLineState">Waiting for serial lines</span>
+              </div>
+              <button id="pingButton" type="button" disabled>Ping</button>
+            </div>
+
+            <div class="adc-line-tools">
+              <label>
+                <span>Delimiter</span>
+                <select id="adcDelimiterSelect">
+                  <option value="AUTO">Auto</option>
+                  <option value="COMMA">Comma</option>
+                  <option value="TAB">Tab</option>
+                  <option value="SPACE">Space</option>
+                  <option value="SEMICOLON">Semicolon</option>
+                  <option value="CUSTOM">Custom</option>
+                </select>
+              </label>
+              <label>
+                <span>Custom</span>
+                <input id="adcCustomDelimiterInput" type="text" maxlength="4" value="," />
+              </label>
+              <label>
+                <span>X Axis</span>
+                <select id="adcXAxisSelect">
+                  <option value="INDEX">Sample index</option>
+                  <option value="MICROS">Time us</option>
+                  <option value="SEQ">Sequence</option>
+                  <option value="CUSTOM">Custom X column</option>
+                </select>
+              </label>
+              <label>
+                <span>Y Axis</span>
+                <select id="adcYAxisSelect">
+                  <option value="DEFAULT">Plot control</option>
+                  <option value="CUSTOM_Y">Custom Y column</option>
+                  <option value="CUSTOM_Y2">Custom Y + Y2</option>
+                </select>
+              </label>
+              <button id="adcColumnAutoButton" type="button">Auto Columns</button>
+            </div>
+
+            <div id="adcColumnTypeList" class="adc-column-list" aria-label="Serial column type mapping"></div>
+            <pre id="logOutput" class="log-output" aria-live="polite"></pre>
+          </section>
+
           <div class="plot-toolbar">
             <div>
               <h2>Live Signal</h2>
@@ -619,14 +668,6 @@
             </div>
             <div id="classificationWindowState" class="classification-window-state">Input data window: --</div>
             <div id="classificationList" class="classification-list"></div>
-          </div>
-
-          <div id="deviceLogSection" class="settings-section device-log-section">
-            <div class="panel-header compact">
-              <h2>Device Log</h2>
-              <button id="pingButton" type="button" disabled>Ping</button>
-            </div>
-            <pre id="logOutput" class="log-output" aria-live="polite"></pre>
           </div>
         </aside>
 
