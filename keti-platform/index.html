@@ -1,0 +1,661 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>KETI Nano 33 BLE Rev2 Lab Console</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">K</div>
+          <div>
+            <span class="browser-recommendation">Chrome browser recommended for Web Serial / Flash</span>
+            <h1>KETI Lab Console</h1>
+            <p>Arduino Nano 33 BLE Rev2 - ADC and filtering</p>
+          </div>
+        </div>
+        <div class="status-strip" aria-live="polite">
+          <span id="browserStatus" class="status-pill">Web Serial check</span>
+          <span id="portStatus" class="status-pill muted">Disconnected</span>
+          <span id="streamStatus" class="status-pill muted">Idle</span>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <aside class="panel controls-panel">
+          <div class="panel-header">
+            <h2>Device</h2>
+            <span id="sampleCount">0 samples</span>
+          </div>
+
+          <div class="button-row">
+            <button id="connectButton" class="primary-button" type="button">Connect</button>
+            <button id="disconnectButton" type="button" disabled>Disconnect</button>
+          </div>
+
+          <div class="button-row">
+            <button id="startButton" type="button" disabled>Start</button>
+            <button id="stopButton" type="button" disabled>Stop</button>
+          </div>
+
+          <label class="field">
+            <span>ADC Channel</span>
+            <select id="channelSelect">
+              <option value="0">A0</option>
+              <option value="1">A1</option>
+              <option value="2">A2</option>
+              <option value="3">A3</option>
+              <option value="4">A4</option>
+              <option value="5">A5</option>
+              <option value="6">A6</option>
+              <option value="7">A7</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Sample Rate</span>
+            <div class="inline-input">
+              <input id="rateInput" type="number" min="1" max="1000" step="1" value="100" />
+              <span>Hz</span>
+            </div>
+          </label>
+
+          <label class="field">
+            <span>ADC Resolution</span>
+            <select id="resolutionSelect">
+              <option value="12">12 bit</option>
+              <option value="10">10 bit</option>
+            </select>
+          </label>
+
+          <button id="applyAcquisitionButton" type="button" disabled>Apply Acquisition</button>
+
+          <div class="divider"></div>
+
+          <div class="panel-header compact">
+            <h2>Firmware Flash</h2>
+            <span id="flashState">Ready</span>
+          </div>
+
+          <label class="field">
+            <span>Firmware</span>
+            <select id="firmwareSelect">
+              <option value="stage1_lab_console">Stage 1 ADC/filter v0.1.1</option>
+            </select>
+          </label>
+
+          <div class="flash-main-action">
+            <button id="flashButton" class="primary-button" type="button">Flash Firmware</button>
+          </div>
+          <progress id="flashProgress" class="flash-progress" max="100" value="0"></progress>
+          <div class="flash-recovery-row">
+            <button id="bootloaderButton" class="recovery-button" type="button">Recovery Bootloader</button>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="panel-header compact">
+            <h2>Recording</h2>
+            <span id="recordCount">0 rows</span>
+          </div>
+          <label class="field">
+            <span>Label</span>
+            <input id="labelInput" type="text" value="adc_lab" />
+          </label>
+          <div class="button-row">
+            <button id="recordButton" type="button" disabled>Record</button>
+            <button id="clearButton" type="button">Clear</button>
+          </div>
+          <button id="exportButton" type="button" disabled>Export CSV</button>
+        </aside>
+
+        <section class="plot-panel">
+          <div class="plot-toolbar">
+            <div>
+              <h2>Live Signal</h2>
+              <p id="plotMeta">Waiting for device data</p>
+            </div>
+            <div class="plot-actions">
+              <div class="view-tabs" role="tablist" aria-label="Plot view">
+                <button class="view-tab active" type="button" data-view="adc">ADC</button>
+                <button class="view-tab" type="button" data-view="imu1d">IMU 1D</button>
+                <button class="view-tab" type="button" data-view="imu2d">IMU 2D</button>
+                <button class="view-tab" type="button" data-view="classification">Class</button>
+                <button class="view-tab" type="button" data-view="dataset">Dataset</button>
+                <button class="view-tab" type="button" data-view="model">Model</button>
+                <button class="view-tab" type="button" data-view="ppg">PPG HRV</button>
+              </div>
+              <div id="adcPlotControls" class="adc-plot-controls" aria-label="ADC plot controls">
+                <label>
+                  <span>Format</span>
+                  <select id="adcFormatSelect">
+                    <option value="ALL">All ADC</option>
+                    <option value="DATA">DATA</option>
+                    <option value="BUF">BUF</option>
+                    <option value="FILT">FILT</option>
+                    <option value="PLOTTER">raw:/filtered:</option>
+                    <option value="BLE_DATA">BLE_DATA</option>
+                    <option value="PPG">PPG mirror</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Plot</span>
+                  <select id="adcPlotModeSelect">
+                    <option value="RAW_FILTERED">Raw + Filtered</option>
+                    <option value="RAW">Raw only</option>
+                    <option value="FILTERED">Filtered only</option>
+                    <option value="MILLIVOLTS">Voltage mV</option>
+                    <option value="DELTA">Filtered - Raw</option>
+                  </select>
+                </label>
+                <span id="adcFormatState" class="adc-format-state">All ADC</span>
+              </div>
+              <div class="toggle-group" role="group" aria-label="Trace visibility">
+                <label><input id="showRawToggle" type="checkbox" checked /> Raw</label>
+                <label><input id="showFilteredToggle" type="checkbox" checked /> Filtered</label>
+                <label><input id="autoScaleToggle" type="checkbox" checked /> Auto scale</label>
+              </div>
+            </div>
+          </div>
+          <canvas id="signalCanvas" width="1200" height="520" aria-label="ADC signal plot"></canvas>
+          <section id="ppgView" class="lab-view is-hidden" aria-label="PPG HRV CNN analysis">
+            <div class="lab-view-header">
+              <div>
+                <h2>PPG HRV CNN</h2>
+                <p>1D CNN-style pulse detection and HRV estimation from PPG windows</p>
+              </div>
+              <div class="summary-stack">
+                <strong id="ppgStatus">No data</strong>
+                <span id="ppgSourceState">Waiting for ADC</span>
+              </div>
+            </div>
+
+            <div class="lab-grid">
+              <section class="lab-section">
+                <div class="section-title">
+                  <h3>Input</h3>
+                  <span id="ppgMetricState">Waiting</span>
+                </div>
+
+                <div class="field-row">
+                  <label class="field">
+                    <span>Sample Rate</span>
+                    <input id="ppgSampleRateInput" type="number" min="1" max="1000" step="1" value="100" />
+                  </label>
+
+                  <label class="field">
+                    <span>Window Sec</span>
+                    <input id="ppgDurationInput" type="number" min="8" max="180" step="1" value="30" />
+                  </label>
+                </div>
+
+                <div class="field-row">
+                  <label class="field">
+                    <span>Refractory ms</span>
+                    <input id="ppgRefractoryInput" type="number" min="250" max="1200" step="25" value="420" />
+                  </label>
+                </div>
+
+                <label class="field">
+                  <span>CNN Threshold</span>
+                  <div class="inline-input">
+                    <input id="ppgThresholdInput" type="range" min="0.10" max="0.90" step="0.01" value="0.42" />
+                    <output id="ppgThresholdOutput">0.42</output>
+                  </div>
+                </label>
+
+                <div id="ppgMetrics" class="model-metrics"></div>
+              </section>
+
+              <section class="lab-section">
+                <div class="section-title">
+                  <h3>Signal</h3>
+                  <span id="ppgWindowState">No window</span>
+                </div>
+                <canvas id="ppgCanvas" width="1000" height="300" aria-label="PPG signal and detected pulse peaks"></canvas>
+                <div class="section-title compact-title ppg-cnn-title">
+                  <h3>CNN Detector</h3>
+                  <span id="ppgCnnState">Idle</span>
+                </div>
+                <canvas id="ppgCnnCanvas" width="1000" height="220" aria-label="PPG 1D CNN pulse score"></canvas>
+              </section>
+            </div>
+          </section>
+          <section id="datasetView" class="lab-view is-hidden" aria-label="Dataset collection">
+            <div class="lab-view-header">
+              <div>
+                <h2>Dataset Collection</h2>
+                <p>Windowed IMU samples for browser-side TinyML training</p>
+              </div>
+              <div class="summary-stack">
+                <strong id="datasetSummary">0 windows</strong>
+                <span id="datasetSizeState">0 x 0 features</span>
+              </div>
+            </div>
+
+            <div class="lab-grid">
+              <section class="lab-section">
+                <div class="section-title">
+                  <h3>Capture</h3>
+                  <span id="datasetCaptureState">Idle</span>
+                </div>
+
+                <div class="field-row">
+                  <label class="field">
+                    <span>Label</span>
+                    <input id="datasetLabelInput" type="text" value="motion_a" />
+                  </label>
+
+                  <label class="field">
+                    <span>Window</span>
+                    <input id="datasetWindowInput" type="number" min="16" max="900" step="1" value="125" />
+                  </label>
+                </div>
+
+                <div class="field-row">
+                  <label class="field">
+                    <span>Stride</span>
+                    <input id="datasetStrideInput" type="number" min="1" max="900" step="1" value="31" />
+                  </label>
+
+                  <label class="field">
+                    <span>Feature</span>
+                    <select id="datasetFeatureSelect">
+                      <option value="STATS">Stats 15</option>
+                      <option value="FLATTEN">Flatten window</option>
+                    </select>
+                  </label>
+                </div>
+
+                <label class="field">
+                  <span>Source</span>
+                  <select id="datasetSourceSelect">
+                    <option value="PROCESSED">Processed IMU</option>
+                    <option value="RAW">Raw IMU</option>
+                  </select>
+                </label>
+
+                <div class="button-row">
+                  <button id="datasetCaptureButton" type="button">Start Capture</button>
+                  <button id="datasetCaptureOneButton" type="button">Capture One</button>
+                </div>
+
+                <div class="button-row">
+                  <button id="datasetExportJsonButton" type="button">Export JSON</button>
+                  <button id="datasetExportCsvButton" type="button">Export CSV</button>
+                </div>
+
+                <div class="button-row">
+                  <button id="datasetClearButton" type="button">Clear Dataset</button>
+                  <label class="file-button">
+                    <input id="datasetImportInput" type="file" accept=".json,application/json" />
+                    Import JSON
+                  </label>
+                </div>
+              </section>
+
+              <section class="lab-section">
+                <div class="section-title">
+                  <h3>Windows</h3>
+                  <span id="datasetFeatureState">No data</span>
+                </div>
+                <div class="dataset-preview">
+                  <div class="section-title compact-title">
+                    <h3>Live 1D Window</h3>
+                    <span id="datasetPreviewState">0 / 125 samples</span>
+                  </div>
+                  <canvas id="datasetPreviewCanvas" width="900" height="240" aria-label="Dataset live 1D window plot"></canvas>
+                </div>
+                <div id="datasetLabelList" class="dataset-label-list"></div>
+                <div class="dataset-window-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Label</th>
+                        <th>Window</th>
+                        <th>Feature</th>
+                        <th>Source</th>
+                      </tr>
+                    </thead>
+                    <tbody id="datasetTableBody"></tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+          </section>
+
+          <section id="modelView" class="lab-view is-hidden" aria-label="Model lab">
+            <div class="lab-view-header">
+              <div>
+                <h2>Model Lab</h2>
+                <p>Browser-trained ANN from collected windows</p>
+              </div>
+              <strong id="modelStatus">Idle</strong>
+            </div>
+
+            <div class="lab-grid">
+              <section class="lab-section">
+                <div class="section-title">
+                  <h3>Architecture</h3>
+                  <span id="modelShapeState">No model</span>
+                </div>
+                <canvas id="modelArchitectureCanvas" width="900" height="260" aria-label="ANN architecture diagram"></canvas>
+
+                <div class="field-row">
+                  <label class="field">
+                    <span>Hidden Layers</span>
+                    <input id="hiddenLayerInput" type="number" min="0" max="4" step="1" value="1" />
+                  </label>
+
+                  <label class="field">
+                    <span>Neurons / Layer</span>
+                    <input id="neuronInput" type="number" min="2" max="128" step="1" value="16" />
+                  </label>
+                </div>
+
+                <label class="field">
+                  <span>Activation</span>
+                  <select id="activationSelect">
+                    <option value="relu">ReLU</option>
+                    <option value="tanh">Tanh</option>
+                    <option value="sigmoid">Sigmoid</option>
+                  </select>
+                </label>
+
+                <div class="field-row">
+                  <label class="field">
+                    <span>Learning Rate</span>
+                    <input id="learningRateInput" type="number" min="0.0001" max="1" step="0.001" value="0.02" />
+                  </label>
+
+                  <label class="field">
+                    <span>Epochs</span>
+                    <input id="epochInput" type="number" min="1" max="2000" step="1" value="120" />
+                  </label>
+                </div>
+
+                <label class="field">
+                  <span>Pruning Sparsity</span>
+                  <div class="inline-input">
+                    <input id="pruningInput" type="range" min="0" max="0.95" step="0.01" value="0" />
+                    <output id="pruningOutput">0%</output>
+                  </div>
+                </label>
+
+                <label class="check-field">
+                  <input id="quantizeToggle" type="checkbox" checked />
+                  <span>Quantized export</span>
+                </label>
+
+                <button id="trainModelButton" type="button">Train Model</button>
+
+                <div class="button-row">
+                  <button id="exportModelJsonButton" type="button">Export JSON</button>
+                  <button id="exportCArrayButton" type="button">Export C Array</button>
+                </div>
+              </section>
+
+              <section class="lab-section">
+                <div class="section-title">
+                  <h3>Result</h3>
+                  <span id="modelMetricState">Waiting</span>
+                </div>
+                <div id="modelMetrics" class="model-metrics"></div>
+                <pre id="modelLog" class="model-log"></pre>
+              </section>
+            </div>
+          </section>
+
+          <div id="metricGrid" class="metric-grid">
+            <div>
+              <span id="metric1Label">Raw</span>
+              <strong id="rawMetric">--</strong>
+            </div>
+            <div>
+              <span id="metric2Label">Filtered</span>
+              <strong id="filteredMetric">--</strong>
+            </div>
+            <div>
+              <span id="metric3Label">Voltage</span>
+              <strong id="voltageMetric">--</strong>
+            </div>
+            <div>
+              <span id="metric4Label">Rate</span>
+              <strong id="rateMetric">--</strong>
+            </div>
+          </div>
+
+          <section id="adcSettingsSection" class="dsp-panel settings-section" aria-label="Digital signal processing">
+            <div class="panel-header">
+              <div>
+                <h2>Digital Signal Processing</h2>
+                <p>IIR transfer-function lab for ADC filtering</p>
+              </div>
+              <span id="filterState">RAW</span>
+            </div>
+
+            <div class="dsp-layout">
+              <div class="dsp-controls">
+                <div class="field-row dsp-mode-row">
+                  <label class="field">
+                    <span>Filter Mode</span>
+                    <select id="filterSelect">
+                      <option value="RAW">Raw passthrough</option>
+                      <option value="MA">Moving average</option>
+                      <option value="EMA">Exponential average</option>
+                      <option value="IIR_LPF">IIR low-pass</option>
+                      <option value="IIR_HPF">IIR high-pass</option>
+                      <option value="IIR_BPF">IIR band-pass</option>
+                    </select>
+                  </label>
+
+                  <label class="field">
+                    <span>Command Target</span>
+                    <select id="dspProtocolSelect">
+                      <option value="AUTO">Auto</option>
+                      <option value="STAGE1">Stage 1 console</option>
+                      <option value="DAY2_IIR">Day2 IIR example</option>
+                    </select>
+                  </label>
+
+                  <label class="field">
+                    <span>IIR Order</span>
+                    <input id="iirOrderInput" type="number" min="1" max="4" step="1" value="2" />
+                  </label>
+                </div>
+
+                <div class="field-row">
+                  <label class="field">
+                    <span>Low Cutoff</span>
+                    <div class="inline-input">
+                      <input id="iirLowInput" type="number" min="0.01" max="450" step="0.1" value="1.0" />
+                      <span>Hz</span>
+                    </div>
+                  </label>
+
+                  <label class="field">
+                    <span>High Cutoff</span>
+                    <div class="inline-input">
+                      <input id="iirHighInput" type="number" min="0.02" max="450" step="0.1" value="10.0" />
+                      <span>Hz</span>
+                    </div>
+                  </label>
+                </div>
+
+                <div class="field-row">
+                  <label class="field">
+                    <span>EMA Alpha</span>
+                    <div class="inline-input">
+                      <input id="alphaInput" type="range" min="0.001" max="1" step="0.001" value="0.2" />
+                      <output id="alphaOutput">0.200</output>
+                    </div>
+                  </label>
+
+                  <label class="field">
+                    <span>MA Window</span>
+                    <div class="inline-input">
+                      <input id="windowInput" type="number" min="0.001" max="32" step="0.01" value="0.08" />
+                      <span>s</span>
+                    </div>
+                  </label>
+                </div>
+
+                <button id="applyFilterButton" type="button" disabled>Apply DSP Filter</button>
+              </div>
+
+              <div class="dsp-transfer">
+                <div class="section-title compact-title">
+                  <h3>IIR Transfer Function</h3>
+                  <span id="dspEquationMode">RAW</span>
+                </div>
+                <pre id="dspTransferFunction" class="dsp-formula">H(z) = 1</pre>
+                <pre id="dspSectionEquation" class="dsp-formula muted-formula">y[n] = x[n]</pre>
+                <div id="dspCoefficientGrid" class="dsp-coefficient-grid"></div>
+                <span id="dspNyquistState" class="dsp-note">Nyquist: --</span>
+              </div>
+
+              <div class="dsp-response">
+                <div class="section-title compact-title">
+                  <h3>Frequency Response</h3>
+                  <span>Magnitude</span>
+                </div>
+                <canvas id="iirResponseCanvas" width="720" height="220" aria-label="IIR frequency response plot"></canvas>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <aside class="panel settings-panel">
+          <div id="inputSettingsSection" class="settings-section">
+            <div class="panel-header compact">
+              <h2>Input</h2>
+              <span id="inputState">125 win</span>
+            </div>
+
+            <label class="field">
+              <span>Window Samples</span>
+              <input id="inputWindowInput" type="number" min="16" max="900" step="1" value="125" />
+            </label>
+
+            <label class="field">
+              <span>Pre-filter</span>
+              <select id="inputFilterSelect">
+                <option value="NONE">None</option>
+                <option value="MA">Moving average</option>
+                <option value="EMA">Exponential average</option>
+                <option value="IIR_LPF">IIR low-pass</option>
+                <option value="IIR_HPF">IIR high-pass</option>
+                <option value="IIR_BPF">IIR band-pass</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Normalize</span>
+              <select id="normalizeSelect">
+                <option value="NONE">None</option>
+                <option value="CENTER">Center mean</option>
+                <option value="ZSCORE">Z-score</option>
+                <option value="MINMAX">Min-max -1..1</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>EMA Alpha</span>
+              <div class="inline-input">
+                <input id="inputAlphaInput" type="range" min="0.001" max="1" step="0.001" value="0.2" />
+                <output id="inputAlphaOutput">0.200</output>
+              </div>
+            </label>
+
+            <div class="field-row">
+              <label class="field">
+                <span>MA Window</span>
+                <input id="inputMaWindowInput" type="number" min="1" max="128" step="1" value="5" />
+              </label>
+
+              <label class="field">
+                <span>IIR Order</span>
+                <input id="inputIirOrderInput" type="number" min="1" max="4" step="1" value="2" />
+              </label>
+            </div>
+
+            <label class="field">
+              <span>IIR Low Cutoff</span>
+              <div class="inline-input">
+                <input id="inputIirLowInput" type="number" min="0.01" max="95" step="0.1" value="0.5" />
+                <span>Hz</span>
+              </div>
+            </label>
+
+            <label class="field">
+              <span>IIR High Cutoff</span>
+              <div class="inline-input">
+                <input id="inputIirHighInput" type="number" min="0.02" max="95" step="0.1" value="8.0" />
+                <span>Hz</span>
+              </div>
+            </label>
+
+            <button id="applyInputButton" type="button">Apply Input</button>
+          </div>
+
+          <div id="classificationSettingsSection" class="settings-section">
+            <div class="panel-header compact">
+              <h2>Classification</h2>
+              <span id="classificationState">Idle</span>
+            </div>
+
+            <div class="button-row">
+              <button id="classStartButton" type="button" disabled>Start Class</button>
+              <button id="classStopButton" type="button" disabled>Stop Class</button>
+            </div>
+
+            <div class="classification-summary">
+              <span id="classificationTopLabel">--</span>
+              <strong id="classificationTopScore">--</strong>
+            </div>
+            <div id="classificationWindowState" class="classification-window-state">Input data window: --</div>
+            <div id="classificationList" class="classification-list"></div>
+          </div>
+
+          <div id="deviceLogSection" class="settings-section device-log-section">
+            <div class="panel-header compact">
+              <h2>Device Log</h2>
+              <button id="pingButton" type="button" disabled>Ping</button>
+            </div>
+            <pre id="logOutput" class="log-output" aria-live="polite"></pre>
+          </div>
+        </aside>
+
+        <section class="data-panel">
+          <div class="panel-header">
+            <h2>Recent Samples</h2>
+            <span id="lastTimestamp">No data</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Seq</th>
+                  <th>Format</th>
+                  <th>Time us</th>
+                  <th>Channel</th>
+                  <th>Raw</th>
+                  <th>mV</th>
+                  <th>Filtered</th>
+                </tr>
+              </thead>
+              <tbody id="sampleTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="direct-flasher.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
