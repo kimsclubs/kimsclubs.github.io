@@ -121,6 +121,7 @@
             <button id="exitBootloaderButton" class="recovery-button" type="button">Exit Bootloader</button>
           </div>
           <div class="helper-download-row">
+            <a class="download-button" href="downloads/keti_day2_setup_checker.zip" download title="Download Day2 Arduino setup checker">Setup Check</a>
             <a class="download-button" href="tools/start_flash_helper.ps1" download title="Download PowerShell helper launcher">Helper Script</a>
             <a class="download-button" href="downloads/keti_flash_helper_bundle.zip" download title="Download runnable helper bundle">Helper Bundle</a>
           </div>
@@ -183,6 +184,11 @@
                   </select>
                 </label>
                 <span id="adcFormatState" class="adc-format-state">RAW samples - 0</span>
+              </div>
+              <div id="gyroControls" class="gyro-controls is-hidden" aria-label="Gyro 3D controls">
+                <label><input id="gyroMagCorrectionToggle" type="checkbox" checked /> Mag correction</label>
+                <button id="gyroResetButton" type="button">Reset</button>
+                <span id="gyroMagState">Mag --</span>
               </div>
               <div class="toggle-group" role="group" aria-label="Trace visibility">
                 <label><input id="showRawToggle" type="checkbox" checked /> Raw</label>
