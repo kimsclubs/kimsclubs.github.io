@@ -454,7 +454,7 @@
               <span id="metric3Label">Voltage</span>
               <strong id="voltageMetric">--</strong>
             </div>
-            <div>
+            <div id="metric4Card">
               <span id="metric4Label">Rate</span>
               <strong id="rateMetric">--</strong>
             </div>
@@ -528,6 +528,10 @@
 
                   <label class="field">
                     <span>MA Window</span>
+                    <div class="window-slider-row">
+                      <input id="windowSliderInput" type="range" min="1" max="32" step="1" value="8" />
+                      <output id="windowSliderOutput">8 samples</output>
+                    </div>
                     <div class="inline-input">
                       <input id="windowInput" type="number" min="0.001" max="32" step="0.01" value="0.08" />
                       <span>s</span>
