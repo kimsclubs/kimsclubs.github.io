@@ -198,6 +198,11 @@
                     <option value="DELTA">Filtered - Raw</option>
                   </select>
                 </label>
+                <label class="adc-window-control">
+                  <span>View Window</span>
+                  <input id="adcViewWindowInput" type="range" min="1" max="30" step="1" value="5" />
+                  <output id="adcViewWindowOutput">5 s / 500 samples</output>
+                </label>
                 <span id="adcFormatState" class="adc-format-state">RAW samples - 0</span>
               </div>
               <div id="gyroControls" class="gyro-controls is-hidden" aria-label="Gyro 3D controls">
