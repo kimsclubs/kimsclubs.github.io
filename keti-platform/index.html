@@ -12,20 +12,15 @@
         <div class="brand">
           <div class="brand-mark" aria-hidden="true">K</div>
           <div>
-            <span class="browser-recommendation">Chrome browser recommended for Web Serial / Web Bluetooth / Flash</span>
+            <span class="browser-recommendation">Chrome browser recommended for Web Serial / Flash</span>
             <h1>KETI Lab Console</h1>
             <p>Arduino Nano 33 BLE Rev2 - ADC and filtering</p>
           </div>
         </div>
         <div class="status-strip" aria-live="polite">
-          <span id="browserStatus" class="status-pill">Browser API check</span>
+          <span id="browserStatus" class="status-pill">Web Serial check</span>
           <span id="portStatus" class="status-pill muted">Disconnected</span>
-          <span id="bleStatus" class="status-pill muted">BLE check</span>
           <span id="streamStatus" class="status-pill muted">Idle</span>
-          <div class="status-view-shortcuts" role="tablist" aria-label="Dataset and model tools">
-            <button class="view-tab status-view-tab" type="button" data-view="dataset">Dataset</button>
-            <button class="view-tab status-view-tab" type="button" data-view="model">Model</button>
-          </div>
         </div>
       </header>
 
@@ -37,13 +32,8 @@
           </div>
 
           <div class="button-row">
-            <button id="connectButton" class="primary-button" type="button">Serial Connect</button>
-            <button id="disconnectButton" type="button" disabled>Serial Disconnect</button>
-          </div>
-
-          <div class="button-row">
-            <button id="bleConnectButton" type="button">BLE Connect</button>
-            <button id="bleDisconnectButton" type="button" disabled>BLE Disconnect</button>
+            <button id="connectButton" class="primary-button" type="button">Connect</button>
+            <button id="disconnectButton" type="button" disabled>Disconnect</button>
           </div>
 
           <div class="button-row">
@@ -85,68 +75,24 @@
 
           <div class="divider"></div>
 
-          <details class="firmware-details">
-            <summary class="firmware-summary">
-              <span>Firmware Flash</span>
-              <span id="flashState">Ready</span>
-            </summary>
-            <div class="firmware-details-body">
-              <label class="field">
-                <span>Firmware</span>
-                <select id="firmwareSelect">
-                  <option value="stage1_lab_console">Stage 1 ADC/filter v0.1.1</option>
-                </select>
-              </label>
+          <div class="panel-header compact">
+            <h2>Firmware Flash</h2>
+            <span id="flashState">Ready</span>
+          </div>
 
-              <label class="field">
-                <span>Flash Mode</span>
-                <select id="flashProfileSelect">
-                  <option value="compatibility" selected>Segmented - safest Web Serial</option>
-                  <option value="standard">Standard - single-page transfer</option>
-                </select>
-              </label>
+          <label class="field">
+            <span>Firmware</span>
+            <select id="firmwareSelect">
+              <option value="stage1_lab_console">Stage 1 ADC/filter v0.1.1</option>
+            </select>
+          </label>
 
-              <label class="field">
-                <span>Helper Port</span>
-                <select id="helperPortSelect" disabled>
-                  <option value="">Helper not detected</option>
-                </select>
-              </label>
-              <div class="helper-status-row">
-                <span id="helperState">Helper idle</span>
-                <button id="refreshHelperButton" class="recovery-button" type="button">Refresh</button>
-              </div>
-
-              <div class="flash-main-action">
-                <button id="flashButton" class="primary-button" type="button">Flash Firmware</button>
-              </div>
-              <progress id="flashProgress" class="flash-progress" max="100" value="0"></progress>
-              <div class="flash-recovery-row">
-                <button id="bootloaderButton" class="recovery-button" type="button">Recovery Bootloader</button>
-                <button id="exitBootloaderButton" class="recovery-button" type="button">Exit Bootloader</button>
-              </div>
-              <div class="helper-download-row">
-                <a class="download-button" href="tools/start_flash_helper.ps1" download title="Download PowerShell helper launcher">Helper Script</a>
-                <a class="download-button" href="downloads/keti_flash_helper_bundle.zip" download title="Download runnable helper bundle">Helper Bundle</a>
-              </div>
-            </div>
-          </details>
-
-          <div class="download-callout">
-            <a class="download-button example-download-button" href="downloads/keti_day2_setup_checker.zip" download title="Download Day2 example sketches and setup checker">예제코드 다운로드</a>
-            <div class="course-material-downloads" aria-label="강의자료 다운로드">
-              <span class="download-row-label">강의자료 다운로드</span>
-              <div class="course-material-download-row">
-                <a class="download-button course-material-download-button" href="downloads/keti_day1_course_material.pdf" download title="1일차 강의자료 PDF 다운로드">1일차 교재 PDF</a>
-                <a class="download-button course-material-download-button" href="downloads/keti_day2_course_material.pdf" download title="2일차 강의자료 PDF 다운로드">2일차 교재 PDF</a>
-                <a class="download-button course-material-download-button" href="downloads/keti_day3_course_material.pdf" download title="3일차 강의자료 PDF 다운로드">3일차 교재 PDF</a>
-              </div>
-            </div>
-            <div class="library-download-row" aria-label="Example 08 library downloads">
-              <a class="download-button" href="downloads/KETI_EI_Motion_Minimal_import_library.zip" download title="Install with Arduino IDE Add .ZIP Library">8번 EI Library</a>
-              <a class="download-button" href="downloads/Arduino_BMI270_BMM150_import_library.zip" download title="Install with Arduino IDE Add .ZIP Library">8번 IMU Library</a>
-              <a class="download-button" href="downloads/ex08_required_import_libraries.zip" download title="Bundle containing both Example 08 import ZIP files">8번 Library Bundle</a>
-            </div>
+          <div class="flash-main-action">
+            <button id="flashButton" class="primary-button" type="button">Flash Firmware</button>
+          </div>
+          <progress id="flashProgress" class="flash-progress" max="100" value="0"></progress>
+          <div class="flash-recovery-row">
+            <button id="bootloaderButton" class="recovery-button" type="button">Recovery Bootloader</button>
           </div>
 
           <div class="divider"></div>
@@ -166,21 +112,7 @@
           <button id="exportButton" type="button" disabled>Export CSV</button>
         </aside>
 
-        <div class="workspace-splitter workspace-splitter-vertical workspace-splitter-left" data-resize-target="controls" role="separator" aria-orientation="vertical" title="Drag to resize Device panel. Double-click to reset layout."></div>
-
         <section class="plot-panel">
-          <section id="deviceLogSection" class="device-log-section adc-line-inspector">
-            <div class="panel-header compact">
-              <div>
-                <h2>Device Log</h2>
-                <span id="adcLineState">Waiting for serial lines</span>
-              </div>
-              <button id="pingButton" type="button" disabled>Ping</button>
-            </div>
-
-            <pre id="logOutput" class="log-output" aria-live="polite"></pre>
-          </section>
-
           <div class="plot-toolbar">
             <div>
               <h2>Live Signal</h2>
@@ -191,11 +123,24 @@
                 <button class="view-tab active" type="button" data-view="adc">ADC</button>
                 <button class="view-tab" type="button" data-view="imu1d">IMU 1D</button>
                 <button class="view-tab" type="button" data-view="imu2d">IMU 2D</button>
-                <button class="view-tab" type="button" data-view="gyro3d">Gyro 3D</button>
                 <button class="view-tab" type="button" data-view="classification">Class</button>
+                <button class="view-tab" type="button" data-view="dataset">Dataset</button>
+                <button class="view-tab" type="button" data-view="model">Model</button>
                 <button class="view-tab" type="button" data-view="ppg">PPG HRV</button>
               </div>
               <div id="adcPlotControls" class="adc-plot-controls" aria-label="ADC plot controls">
+                <label>
+                  <span>Format</span>
+                  <select id="adcFormatSelect">
+                    <option value="ALL">All ADC</option>
+                    <option value="DATA">DATA</option>
+                    <option value="BUF">BUF</option>
+                    <option value="FILT">FILT</option>
+                    <option value="PLOTTER">raw:/filtered:</option>
+                    <option value="BLE_DATA">BLE_DATA</option>
+                    <option value="PPG">PPG mirror</option>
+                  </select>
+                </label>
                 <label>
                   <span>Plot</span>
                   <select id="adcPlotModeSelect">
@@ -206,17 +151,7 @@
                     <option value="DELTA">Filtered - Raw</option>
                   </select>
                 </label>
-                <label class="adc-window-control">
-                  <span>View Window</span>
-                  <input id="adcViewWindowInput" type="range" min="1" max="30" step="1" value="5" />
-                  <output id="adcViewWindowOutput">5 s / 500 samples</output>
-                </label>
-                <span id="adcFormatState" class="adc-format-state">RAW samples - 0</span>
-              </div>
-              <div id="gyroControls" class="gyro-controls is-hidden" aria-label="Gyro 3D controls">
-                <label><input id="gyroMagCorrectionToggle" type="checkbox" checked /> Mag correction</label>
-                <button id="gyroResetButton" type="button">Reset</button>
-                <span id="gyroMagState">Mag --</span>
+                <span id="adcFormatState" class="adc-format-state">All ADC</span>
               </div>
               <div class="toggle-group" role="group" aria-label="Trace visibility">
                 <label><input id="showRawToggle" type="checkbox" checked /> Raw</label>
@@ -226,11 +161,11 @@
             </div>
           </div>
           <canvas id="signalCanvas" width="1200" height="520" aria-label="ADC signal plot"></canvas>
-          <section id="ppgView" class="lab-view is-hidden" aria-label="PPG HR and HRV analysis">
+          <section id="ppgView" class="lab-view is-hidden" aria-label="PPG HRV CNN analysis">
             <div class="lab-view-header">
               <div>
-                <h2>PPG HR / HRV</h2>
-                <p>Browser-side Conv1D peak HRV and ridge regression HR from ADC PPG windows</p>
+                <h2>PPG HRV CNN</h2>
+                <p>1D CNN-style pulse detection and HRV estimation from PPG windows</p>
               </div>
               <div class="summary-stack">
                 <strong id="ppgStatus">No data</strong>
@@ -265,21 +200,14 @@
                 </div>
 
                 <label class="field">
-                  <span>Peak Threshold</span>
+                  <span>CNN Threshold</span>
                   <div class="inline-input">
                     <input id="ppgThresholdInput" type="range" min="0.10" max="0.90" step="0.01" value="0.42" />
                     <output id="ppgThresholdOutput">0.42</output>
                   </div>
                 </label>
 
-                <div id="ppgModelCompare" class="ppg-model-compare" aria-label="PPG model comparison"></div>
                 <div id="ppgMetrics" class="model-metrics"></div>
-
-                <div class="section-title compact-title ppg-model-title">
-                  <h3>Model Structure</h3>
-                  <span id="ppgModelState">Window --</span>
-                </div>
-                <canvas id="ppgModelCanvas" width="1000" height="260" aria-label="PPG CNN model structure diagram"></canvas>
               </section>
 
               <section class="lab-section">
@@ -289,19 +217,10 @@
                 </div>
                 <canvas id="ppgCanvas" width="1000" height="300" aria-label="PPG signal and detected pulse peaks"></canvas>
                 <div class="section-title compact-title ppg-cnn-title">
-                  <h3>Conv1D Peak Detector</h3>
-                  <div class="compact-inline">
-                    <select id="ppgLayerViewSelect" aria-label="Conv1D layer data view">
-                      <option value="all">All layers</option>
-                      <option value="input">Input waveform</option>
-                      <option value="conv">Conv1D raw maps</option>
-                      <option value="relu">ReLU feature maps</option>
-                      <option value="pool">Pool + score</option>
-                    </select>
-                    <span id="ppgCnnState">Idle</span>
-                  </div>
+                  <h3>CNN Detector</h3>
+                  <span id="ppgCnnState">Idle</span>
                 </div>
-                <canvas id="ppgCnnCanvas" width="1000" height="260" aria-label="PPG Conv1D layer data plot"></canvas>
+                <canvas id="ppgCnnCanvas" width="1000" height="220" aria-label="PPG 1D CNN pulse score"></canvas>
               </section>
             </div>
           </section>
@@ -358,45 +277,6 @@
                     <option value="RAW">Raw IMU</option>
                   </select>
                 </label>
-
-                <details class="learning-guide" open>
-                  <summary>
-                    <span>Input Feature Guide</span>
-                    <strong>Window to ANN input</strong>
-                  </summary>
-                  <div class="learning-guide-body">
-                    <p id="datasetFeatureGuideState" class="guide-current">Waiting for feature settings</p>
-                    <dl class="guide-definitions">
-                      <div>
-                        <dt>Window</dt>
-                        <dd>하나의 학습 샘플에 포함되는 연속 IMU 샘플 수입니다. 샘플 수를 늘리면 더 긴 동작을 관찰합니다.</dd>
-                      </div>
-                      <div>
-                        <dt>Stride</dt>
-                        <dd>다음 윈도우를 저장할 때 이동하는 샘플 수입니다. Window보다 작으면 서로 겹치는 학습 샘플을 만듭니다.</dd>
-                      </div>
-                      <div>
-                        <dt>Stats 15</dt>
-                        <dd>가속도 X/Y/Z 각 축에서 mean, std, min, max, RMS를 계산합니다. 3축 x 5개 통계값으로 항상 15 features입니다.</dd>
-                        <code>mean=sum(x)/N, std=sqrt(sum((x-mean)^2)/N), RMS=sqrt(sum(x^2)/N)</code>
-                      </div>
-                      <div>
-                        <dt>Flatten Window</dt>
-                        <dd>시간 순서대로 ax, ay, az를 펼칩니다. 입력 크기는 Window x 3이며 시계열 모양을 보존하지만 모델이 커집니다.</dd>
-                        <code>[ax0, ay0, az0, ax1, ay1, az1, ...]</code>
-                      </div>
-                      <div>
-                        <dt>Raw / Processed</dt>
-                        <dd>Raw는 수신한 ax/ay/az를 사용하고, Processed는 Input 설정의 필터와 정규화를 적용한 pax/pay/paz를 사용합니다.</dd>
-                      </div>
-                      <div>
-                        <dt>Training Standardization</dt>
-                        <dd>특징 추출 후에는 Source와 관계없이 학습 데이터 전체의 특징별 mean/std로 다시 Z-score 표준화합니다.</dd>
-                        <code>feature_z=(feature-dataset_mean)/dataset_std</code>
-                      </div>
-                    </dl>
-                  </div>
-                </details>
 
                 <div class="button-row">
                   <button id="datasetCaptureButton" type="button">Start Capture</button>
@@ -463,60 +343,7 @@
                   <h3>Architecture</h3>
                   <span id="modelShapeState">No model</span>
                 </div>
-                <canvas id="modelArchitectureCanvas" width="900" height="220" aria-label="ANN layer block diagram"></canvas>
-
-                <details class="learning-guide" open>
-                  <summary>
-                    <span>Training Parameter Guide</span>
-                    <strong>Browser ANN settings</strong>
-                  </summary>
-                  <div class="learning-guide-body">
-                    <p id="modelTrainingGuideState" class="guide-current">Waiting for model settings</p>
-                    <dl class="guide-definitions">
-                      <div>
-                        <dt>Hidden Layers</dt>
-                        <dd>Input과 Output 사이 Dense 레이어 수입니다. 많을수록 복잡한 패턴을 표현하지만 계산량과 과적합 위험이 증가합니다.</dd>
-                      </div>
-                      <div>
-                        <dt>Neurons / Layer</dt>
-                        <dd>각 Hidden 레이어의 출력 개수입니다. 뉴런 수가 늘면 가중치와 RAM 사용량도 함께 증가합니다.</dd>
-                      </div>
-                      <div>
-                        <dt>Activation</dt>
-                        <dd>Hidden 레이어의 비선형 함수입니다. ReLU는 기본 선택이며, Tanh와 Sigmoid는 출력 범위가 제한됩니다.</dd>
-                      </div>
-                      <div>
-                        <dt>Learning Rate</dt>
-                        <dd>한 번의 역전파에서 가중치를 수정하는 크기입니다. 너무 크면 발산하고, 너무 작으면 학습이 느려질 수 있습니다.</dd>
-                      </div>
-                      <div>
-                        <dt>Epochs</dt>
-                        <dd>전체 학습 윈도우를 반복해서 사용하는 횟수입니다. Epoch마다 데이터 순서를 무작위로 섞습니다.</dd>
-                      </div>
-                      <div>
-                        <dt>Train / Test Split</dt>
-                        <dd>라벨별 비율을 유지하면서 일부 윈도우를 Test로 분리합니다. 특징 mean/std와 가중치 학습에는 Train 데이터만 사용합니다.</dd>
-                      </div>
-                      <div>
-                        <dt>Pruning Sparsity</dt>
-                        <dd>학습 후 절댓값이 작은 가중치를 0으로 만드는 목표 비율입니다. 현재는 프루닝 후 재학습하지 않습니다.</dd>
-                      </div>
-                      <div>
-                        <dt>Quantized Export</dt>
-                        <dd>내보낼 때 레이어별 가중치를 INT8로 변환합니다. 현재 Bias와 입력 mean/std는 float로 유지됩니다.</dd>
-                      </div>
-                      <div>
-                        <dt>Output</dt>
-                        <dd>라벨마다 하나의 출력이 생성되고 Softmax가 클래스 확률을 만듭니다. 출력 수는 Dataset의 서로 다른 라벨 수입니다.</dd>
-                      </div>
-                      <div>
-                        <dt>Live Inference</dt>
-                        <dd>학습 시 저장한 Window, Stride, Feature Mode, Raw/Processed Source, 전처리와 Train mean/std를 재사용해 브라우저에서 실시간 분류합니다.</dd>
-                      </div>
-                    </dl>
-                    <p class="guide-caution"><strong>Test 해석:</strong> Test Accuracy는 학습에 사용하지 않은 윈도우로 계산합니다. 단, Stride가 작아 서로 겹친 윈도우는 Train/Test에 유사한 데이터가 포함될 수 있습니다.</p>
-                  </div>
-                </details>
+                <canvas id="modelArchitectureCanvas" width="900" height="260" aria-label="ANN architecture diagram"></canvas>
 
                 <div class="field-row">
                   <label class="field">
@@ -552,14 +379,6 @@
                 </div>
 
                 <label class="field">
-                  <span>Test Split</span>
-                  <div class="inline-input">
-                    <input id="testSplitInput" type="range" min="0.1" max="0.5" step="0.05" value="0.2" />
-                    <output id="testSplitOutput">20%</output>
-                  </div>
-                </label>
-
-                <label class="field">
                   <span>Pruning Sparsity</span>
                   <div class="inline-input">
                     <input id="pruningInput" type="range" min="0" max="0.95" step="0.01" value="0" />
@@ -587,24 +406,6 @@
                 </div>
                 <div id="modelMetrics" class="model-metrics"></div>
                 <pre id="modelLog" class="model-log"></pre>
-
-                <div class="model-live-section">
-                  <div class="section-title">
-                    <h3>Live Browser Inference</h3>
-                    <span id="modelLiveStatus">Train a model first</span>
-                  </div>
-                  <div class="button-row">
-                    <button id="modelLiveStartButton" type="button" disabled>Start Live</button>
-                    <button id="modelLiveStopButton" type="button" disabled>Stop Live</button>
-                  </div>
-                  <div class="classification-summary">
-                    <span id="modelLiveTopLabel">--</span>
-                    <strong id="modelLiveTopScore">--</strong>
-                  </div>
-                  <div id="modelLiveWindowState" class="classification-window-state">Model input window: --</div>
-                  <canvas id="modelLiveCanvas" width="900" height="220" aria-label="Live browser ANN input window"></canvas>
-                  <div id="modelLiveScoreList" class="classification-list"></div>
-                </div>
               </section>
             </div>
           </section>
@@ -622,7 +423,7 @@
               <span id="metric3Label">Voltage</span>
               <strong id="voltageMetric">--</strong>
             </div>
-            <div id="metric4Card">
+            <div>
               <span id="metric4Label">Rate</span>
               <strong id="rateMetric">--</strong>
             </div>
@@ -649,7 +450,6 @@
                       <option value="IIR_LPF">IIR low-pass</option>
                       <option value="IIR_HPF">IIR high-pass</option>
                       <option value="IIR_BPF">IIR band-pass</option>
-                      <option value="IIR_NOTCH">IIR notch / band-stop</option>
                     </select>
                   </label>
 
@@ -697,10 +497,6 @@
 
                   <label class="field">
                     <span>MA Window</span>
-                    <div class="window-slider-row">
-                      <input id="windowSliderInput" type="range" min="1" max="32" step="1" value="8" />
-                      <output id="windowSliderOutput">8 samples</output>
-                    </div>
                     <div class="inline-input">
                       <input id="windowInput" type="number" min="0.001" max="32" step="0.01" value="0.08" />
                       <span>s</span>
@@ -733,8 +529,6 @@
           </section>
         </section>
 
-        <div class="workspace-splitter workspace-splitter-vertical workspace-splitter-right" data-resize-target="settings" role="separator" aria-orientation="vertical" title="Drag to resize Settings panel. Double-click to reset layout."></div>
-
         <aside class="panel settings-panel">
           <div id="inputSettingsSection" class="settings-section">
             <div class="panel-header compact">
@@ -756,7 +550,6 @@
                 <option value="IIR_LPF">IIR low-pass</option>
                 <option value="IIR_HPF">IIR high-pass</option>
                 <option value="IIR_BPF">IIR band-pass</option>
-                <option value="IIR_NOTCH">IIR notch / band-stop</option>
               </select>
             </label>
 
@@ -827,9 +620,15 @@
             <div id="classificationWindowState" class="classification-window-state">Input data window: --</div>
             <div id="classificationList" class="classification-list"></div>
           </div>
-        </aside>
 
-        <div class="workspace-splitter workspace-splitter-horizontal" data-resize-target="data" role="separator" aria-orientation="horizontal" title="Drag to resize Recent Samples panel. Double-click to reset layout."></div>
+          <div id="deviceLogSection" class="settings-section device-log-section">
+            <div class="panel-header compact">
+              <h2>Device Log</h2>
+              <button id="pingButton" type="button" disabled>Ping</button>
+            </div>
+            <pre id="logOutput" class="log-output" aria-live="polite"></pre>
+          </div>
+        </aside>
 
         <section class="data-panel">
           <div class="panel-header">
@@ -856,8 +655,6 @@
       </main>
     </div>
 
-    <script src="models/ppg_hr_cnn_model.js"></script>
-    <script src="models/ppg_hr_regression_model.js"></script>
     <script src="direct-flasher.js"></script>
     <script src="app.js"></script>
   </body>
